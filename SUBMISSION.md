@@ -16,7 +16,7 @@ right — mismatches slow down or break scoring.
 
 ## B. Required repo structure
 Your repo **must** contain your agent code **and** your run outputs on the official
-eval set `agent_arena_eval` (the 20 tasks in [`EVAL.md`](EVAL.md)):
+eval set `agent_arena_eval` (the 10 tasks in [`EVAL.md`](EVAL.md)):
 
 ```
 <your-repo>/
