@@ -68,7 +68,9 @@ Cable: record_roommate_cable_bills(apis,gmail_token,splitwise_token,fs_token,pay
 cable_bill_month_year(subject); parse_cable_bill_amount(content); month_num < cur_month filter.
 
 AMAZON SELLERS: orders have NO seller field. show_order -> order_items -> show_product(product_id) -> seller_id.
-Trusted sellers = seller_ids from past orders. search_products results also have seller_id not seller.
+Trusted sellers = seller_ids from past orders (paginate show_orders). search_products results also have seller_id not seller.
+Trusted watch: place_trusted_seller_watch_order(amazon_token, max_price) — ONE order only, never retry place_order.
+Helpers use preloaded apis: account_password('amazon'), parse_simulated_today() — no apis arg needed.
 
 SPLITWISE: apis.splitwise.record_expense(description, paid_amount, payer_email, debtor_emails, access_token, group_id=...).
 WRONG: create_expense add_expense create_transaction. Roommates group via show_groups_balance not show_groups.
@@ -216,7 +218,7 @@ class HydraContext:
 
     def _seed_marker(self) -> Path:
         safe = "".join(c if c.isalnum() or c in "._-" else "_" for c in self.tenant_id)
-        return self.cache_dir / f".hydra_seeded_v13_{safe}"
+        return self.cache_dir / f".hydra_seeded_v14_{safe}"
 
     def _seed_playbook_if_needed(self) -> None:
         assert self.client is not None
