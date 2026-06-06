@@ -222,7 +222,7 @@ class HydraContext:
 
     def _seed_marker(self) -> Path:
         safe = "".join(c if c.isalnum() or c in "._-" else "_" for c in self.tenant_id)
-        return self.cache_dir / f".hydra_seeded_v8_{safe}"
+        return self.cache_dir / f".hydra_seeded_v9_{safe}"
 
     def _seed_playbook_if_needed(self) -> None:
         assert self.client is not None
