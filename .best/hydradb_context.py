@@ -62,8 +62,7 @@ Gift per roommate: among max(rating) pick product with inventory_quantity >= n r
 Splitwise cable: show_groups_balance → find group_name Roommates → show_group(group_id).
 debtor_emails=[m["email"] for m in group["members"]]; month from subject not enumerate; desc "cable bill [MM-YY]".
 Husband checklist: regex `- N X Name` from attachment; never hardcode qty after download.
-Meeting note: use parse_meeting_schedule_note(content) for 'Meeting Name:' blocks; meeting_datetime(apis,day,time).
-Cable: cable_bill_month_year(subject); parse_cable_bill_amount(content); month_num < cur_month filter.
+Meeting note: title=='Weekly Meetings Times'; parse Attendees: then `- Name` lines; phone search first_name match.
 
 AMAZON SELLERS: orders have NO seller field. show_order -> order_items -> show_product(product_id) -> seller_id.
 Trusted sellers = seller_ids from past orders. search_products results also have seller_id not seller.
@@ -214,7 +213,7 @@ class HydraContext:
 
     def _seed_marker(self) -> Path:
         safe = "".join(c if c.isalnum() or c in "._-" else "_" for c in self.tenant_id)
-        return self.cache_dir / f".hydra_seeded_v11_{safe}"
+        return self.cache_dir / f".hydra_seeded_v10_{safe}"
 
     def _seed_playbook_if_needed(self) -> None:
         assert self.client is not None

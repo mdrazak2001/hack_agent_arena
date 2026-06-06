@@ -442,8 +442,7 @@ RUNTIME_HINTS = """Quick reference (copy when needed):
 - Preloaded helpers (every execution): account_password, parse_simulated_today,
   valid_payment_cards, parse_checklist_lines, splitwise_roommates_group,
   contact_email_by_first_name, parse_meeting_schedule_note, meeting_datetime,
-  parse_cable_bill_amount, cable_bill_month_year,
-  create_meeting_reminder_drafts, record_roommate_cable_bills
+  parse_cable_bill_amount, cable_bill_month_year
 """
 
 # Injected before every world.execute() — general helpers, NOT task-specific.
@@ -480,9 +479,6 @@ def splitwise_roommates_group(apis, splitwise_token):
 def contact_email_by_first_name(apis, phone_token, first_name):
     hits = [c for c in apis.phone.search_contacts(query=first_name, access_token=phone_token)
             if c.get("first_name", "").lower() == first_name.lower()]
-    if hits:
-        return hits[0]["email"]
-    hits = apis.phone.search_contacts(query=first_name, access_token=phone_token)
     return hits[0]["email"] if hits else None
 
 def parse_meeting_schedule_note(content):
@@ -516,8 +512,7 @@ def meeting_datetime(apis, day_name, time_hm):
     today = parse_simulated_today(apis)
     days = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
     d = days.index(day_name)
-    clean = time_hm.strip().strip("'").strip('"')
-    h, mi = map(int, clean.split(":"))
+    h, mi = map(int, time_hm.split(":"))
     meet = today.replace(hour=0, minute=0, second=0, microsecond=0)
     meet += datetime.timedelta(days=(d - today.weekday()) % 7)
     return meet.replace(hour=h, minute=mi)
@@ -537,81 +532,6 @@ def cable_bill_month_year(subject):
     month_name, year_s = m.group(1), m.group(2)
     month_num = list(calendar.month_name).index(month_name)
     return month_num, int(year_s)
-
-def create_meeting_reminder_drafts(apis, gmail_token, phone_token, note_content, supervisor_email):
-    meetings = parse_meeting_schedule_note(note_content)
-    created = 0
-    for m in meetings:
-        if not m.get("day") or not m.get("time"):
-            continue
-        dt = meeting_datetime(apis, m["day"], m["time"])
-        sched = (dt - datetime.timedelta(minutes=20)).strftime("%Y-%m-%dT%H:%M:%S")
-        emails = []
-        for name in m.get("attendees") or []:
-            e = contact_email_by_first_name(apis, phone_token, name)
-            if e and e != supervisor_email:
-                emails.append(e)
-        emails = list(dict.fromkeys(emails))
-        if not emails:
-            continue
-        apis.gmail.create_draft(
-            recipient_email_addresses=emails,
-            subject=f"Meeting '{m['name']}' Starting Soon",
-            body="",
-            scheduled_send_at=sched,
-            access_token=gmail_token,
-        )
-        created += 1
-    return created
-
-def record_roommate_cable_bills(apis, gmail_token, splitwise_token, fs_token, payer_email):
-    today = parse_simulated_today(apis)
-    cur_year, cur_month = today.year, today.month
-    group = splitwise_roommates_group(apis, splitwise_token)
-    debtor_emails = [m["email"] for m in group["members"]]
-    count = 0
-    page_index = 0
-    while True:
-        page = apis.gmail.show_inbox_threads(
-            query="cable bill", access_token=gmail_token, page_limit=20, page_index=page_index
-        )
-        if not page:
-            break
-        for thread in page:
-            emails = apis.gmail.show_thread(
-                email_thread_id=thread["email_thread_id"], access_token=gmail_token
-            )["emails"]
-            subject = emails[0]["subject"]
-            month_num, year = cable_bill_month_year(subject)
-            if month_num is None or year != cur_year or month_num >= cur_month:
-                continue
-            att = emails[0].get("attachments") or []
-            if not att:
-                continue
-            path = apis.gmail.download_attachment(
-                attachment_id=att[0]["id"],
-                access_token=gmail_token,
-                file_system_access_token=fs_token,
-                overwrite=True,
-            )["file_path"]
-            content = apis.file_system.show_file(file_path=path, access_token=fs_token)["content"]
-            amt = parse_cable_bill_amount(content)
-            if amt is None:
-                continue
-            desc = f"cable bill [{month_num:02d}-{str(year)[-2:]}]"
-            apis.splitwise.record_expense(
-                description=desc,
-                paid_amount=amt,
-                payer_email=payer_email,
-                debtor_emails=debtor_emails,
-                group_id=group["group_id"],
-                access_token=splitwise_token,
-            )
-            count += 1
-        if len(page) < 20:
-            break
-        page_index += 1
-    return count
 '''
 
 
@@ -789,9 +709,13 @@ def task_playbook(instruction: str) -> str:
     if "cable bill" in text and "splitwise" in text:
         blocks.append(
             "TASK PLAYBOOK — Splitwise cable bills:\n"
-            "1) Login gmail, splitwise, file_system (account_password helper).\n"
-            "2) n = record_roommate_cable_bills(apis, gmail_token, st, fs_token, supervisor_email)\n"
-            "3) print(n); complete_task(answer=None). Do NOT create groups or use Climbers."
+            "1) group = splitwise_roommates_group(apis, st); debtor_emails = [m['email'] for m in group['members']].\n"
+            "2) Paginate show_inbox_threads(query='cable bill'). For each thread, subject = "
+            "show_thread(...)['emails'][0]['subject'] (first email — do NOT filter by sender).\n"
+            "3) month_num, year = cable_bill_month_year(subject); keep if year==cur_year and month_num < cur_month.\n"
+            "4) download_attachment(..., overwrite=True); amt = parse_cable_bill_amount(content).\n"
+            "5) desc = f'cable bill [{month_num:02d}-{str(year)[-2:]}]'; "
+            "record_expense(..., group_id=group['group_id']). One expense per bill."
         )
 
     if "wish list" in text and "text" in text and "partner" in text:
@@ -817,10 +741,15 @@ def task_playbook(instruction: str) -> str:
     if "reminder email" in text and "meeting" in text:
         blocks.append(
             "TASK PLAYBOOK — meeting reminder drafts:\n"
-            "1) Login simple_note, gmail, phone (account_password helper). Get note title "
-            "'Weekly Meetings Times' via show_note.\n"
-            "2) n = create_meeting_reminder_drafts(apis, gmail_token, phone_token, content, supervisor_email)\n"
-            "3) print(n); complete_task(answer=None). Do NOT hand-parse 'Meeting' lines."
+            "1) note = next(n for n in search_notes(...) if n['title']=='Weekly Meetings Times'); "
+            "content = show_note(note_id=...)['content'].\n"
+            "2) meetings = parse_meeting_schedule_note(content)  # uses 'Meeting Name:' line, NOT split()[1].\n"
+            "3) For each m in meetings: dt = meeting_datetime(apis, m['day'], m['time']); "
+            "scheduled = (dt - timedelta(minutes=20)).strftime('%Y-%m-%dT%H:%M:%S').\n"
+            "4) emails = [contact_email_by_first_name(apis, phone_token, a) for a in m['attendees']]; "
+            "dedupe; drop supervisor email.\n"
+            "5) create_draft(recipient_email_addresses=emails, "
+            "subject=f\"Meeting '{m['name']}' Starting Soon\", body='', scheduled_send_at=scheduled)."
         )
 
     if "watch" in text and "trust" in text:
