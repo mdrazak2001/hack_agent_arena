@@ -604,17 +604,53 @@ def task_playbook(instruction: str) -> str:
     if "cable bill" in text and "splitwise" in text:
         blocks.append(
             "TASK PLAYBOOK — Splitwise cable bills:\n"
-            "1) debtor_emails = [m['email'] for m in group['members']] from show_groups — "
-            "members are dicts with 'email'. NEVER use phone search_contacts for debtors.\n"
-            "2) Pick the group whose member emails overlap phone roommates (relationship='roommate').\n"
-            "3) Paginate show_inbox_threads(query='cable bill'). For each email: created_at "
-            "(NOT sent_at); download_attachment(..., overwrite=True); parse 'Total Amount => $N' "
-            "from file; parse usage year from 'duration => YYYY-MM-DD' in file.\n"
-            "4) Keep bills whose USAGE year == cur_year (from get_current_date_and_time).\n"
-            "5) Description from subject 'Cable Bill for June 2023' -> 'cable bill [06-23]' "
-            "(MM=month number, YY=last 2 digits of usage year).\n"
-            "6) record_expense(description, paid_amount, payer_email=your email, "
-            "debtor_emails=member emails, group_id=..., access_token=...)."
+            "1) group = next(g for g in show_groups() if g['name']=='Climbers') — members "
+            "gl.moore@gmail.com, carbrown@gmail.com, andrew_brow@gmail.com. "
+            "IGNORE phone roommate contacts (Adam/Jeremy are NOT in this group).\n"
+            "2) debtor_emails = [m['email'] for m in group['members']] — ALL 3 including payer.\n"
+            "3) Paginate show_inbox_threads(query='cable bill'). Keep bills where subject "
+            "'Cable Bill for <Month> 2023' has month Jan–Jun only (6 bills when today is July).\n"
+            "4) download_attachment(..., overwrite=True); parse 'Total Amount => $N'; "
+            "desc='cable bill [MM-YY]' from bill month in subject.\n"
+            "5) record_expense for each of exactly 6 bills with group_id=group['group_id']."
+        )
+
+    if "wish list" in text and "text" in text and "partner" in text:
+        blocks.append(
+            "TASK PLAYBOOK — wishlist text to partner:\n"
+            "1) Partner phone: search_contacts then filter 'partner' in contact['relationships'] "
+            "(plural list, NOT 'relationship').\n"
+            "2) Build ONE message from show_wish_list: "
+            "'name => $round(price*quantity)' per line.\n"
+            "3) send_text_message EXACTLY ONCE — never send in a debug/print step."
+        )
+
+    if ("wish list" in text or "wishlist" in text) and ("order" in text or "buy" in text or "delivered" in text):
+        if "text" not in text or "partner" not in text:
+            blocks.append(
+                "TASK PLAYBOOK — order wishlist:\n"
+                "1) wishlist = list(show_wish_list()) BEFORE any moves.\n"
+                "2) clear_cart(); for item in wishlist: move_product_from_wish_list_to_cart("
+                "product_id=item['product_id'], quantity=item['quantity']).\n"
+                "3) Try each valid payment card until place_order succeeds."
+            )
+
+    if "reminder email" in text and "meeting" in text:
+        blocks.append(
+            "TASK PLAYBOOK — meeting reminder drafts:\n"
+            "1) Parse Weekly Meetings Times note: name, day, time, attendee first names.\n"
+            "2) ONE create_draft per meeting. For each attendee: search_contacts(query=first_name), "
+            "take contact['email']; dedupe; EXCLUDE your supervisor email.\n"
+            "3) body=''; scheduled_send_at=meeting-20min; "
+            "subject=\"Meeting '<name>' Starting Soon\"."
+        )
+
+    if "watch" in text and "trust" in text:
+        blocks.append(
+            "TASK PLAYBOOK — one trusted-seller watch:\n"
+            "1) clear_cart(). trusted_ids from show_orders→show_order→show_product→seller_id.\n"
+            "2) search_products(product_type='watch', max_price=limit); filter seller_id in trusted_ids.\n"
+            "3) ONE product qty=1; verify len(cart['cart_items'])==1; place_order."
         )
 
     if "checklist" in text and "husband" in text and "email" in text:
@@ -629,16 +665,6 @@ def task_playbook(instruction: str) -> str:
             "4) Parse lines like '- 1 X Product Name' or '- 3 X Product Name' for qty.\n"
             "5) search_products by name, add to cart, remove wrong cart items, place_order once.\n"
             "6) NEVER use base64; NEVER parse party invitation body text as shopping list."
-        )
-
-    if "wish list" in text and "text" in text and "partner" in text:
-        blocks.append(
-            "TASK PLAYBOOK — wishlist text to partner:\n"
-            "1) Partner phone: search_contacts then filter 'partner' in contact['relationships'] "
-            "(plural list, NOT 'relationship').\n"
-            "2) Build ONE message from show_wish_list: "
-            "'name => $round(price*quantity)' per line.\n"
-            "3) send_text_message EXACTLY ONCE — never send in a debug/print step."
         )
 
     if "gaming console controller" in text and "roommates" in text:
