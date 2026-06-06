@@ -2,3 +2,4 @@ appworld
 litellm==1.35.38
 python-dotenv
 tenacity
+hydradb-sdk>=2,<3

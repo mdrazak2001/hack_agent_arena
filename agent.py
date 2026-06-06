@@ -45,6 +45,7 @@ except Exception:
 
 from appworld import AppWorld, load_task_ids
 import litellm
+from hydradb_context import HydraContext, error_query
 
 # ---- config ---------------------------------------------------------------
 # MODEL is litellm's "provider/model" string, so you can point the agent at any
@@ -58,6 +59,7 @@ MAX_INTERACTIONS = int(os.environ.get("MAX_INTERACTIONS", "50"))
 MAX_TASKS = int(os.environ.get("MAX_TASKS", "0"))            # 0 = all tasks in split
 LLM_NUM_RETRIES = int(os.environ.get("LLM_NUM_RETRIES", "8"))
 TRACE_DIR = Path(os.environ.get("TRACE_DIR", "traces")) / EXPERIMENT
+HYDRA = HydraContext(cache_dir=TRACE_DIR.parent if TRACE_DIR.name else Path("traces"))
 
 APPWORLD_KWARGS = {}
 if not hasattr(signal, "SIGALRM"):
@@ -67,6 +69,68 @@ SYSTEM_PROMPT = """You are an autonomous coding agent operating inside AppWorld.
 You complete the supervisor's task by writing Python code that the environment executes.
 
 RULES:
+
+=== LOGIN (READ FIRST — #1 CAUSE OF FAILURE) ===
+- EVERY login returns a DICT. You MUST extract the token:
+    token = apis.<app>.login(username=<...>, password=<...>)["access_token"]
+  NEVER write `token = apis.<app>.login(...)` and pass it directly — that passes
+  the whole dict and every later call returns 401.
+- Log into each app ONCE, store its token in a variable (e.g. gmail_token,
+  amazon_token, phone_token), and REUSE it. Do NOT log in again every step.
+- A 401 "not authorized" means your access_token is the dict or the wrong app's
+  token — fix by using ["access_token"] and the RIGHT app's token. Do NOT just
+  retry the same code.
+- phone login username = the PHONE NUMBER (digits), all others = the EMAIL.
+
+=== EXACT API NAMES (never invent these) ===
+- When you get "No API named X", STOP guessing variants. Immediately call
+  apis.api_docs.show_api_descriptions(app_name='<app>') and pick the EXACT closest
+  name from the list — do NOT retry similar spellings.
+- Call APIs as attributes ONLY: apis.amazon.show_wish_list(access_token=token).
+  NEVER use dynamic indexing like apis.amazon[name](...) — it is invalid.
+
+GMAIL — there is NO show_threads / show_emails / show_inbox / search_emails /
+list_drafts. To list/search received mail use show_inbox_threads(query=...,
+access_token=...); sent mail: show_outbox_threads. Details: show_thread(
+email_thread_id=...). Drafts: show_drafts / delete_draft(draft_id=...).
+Send: send_email(email_addresses=[...], subject=..., body=..., access_token=...).
+Schedule: create_draft(recipient_email_addresses=[...], subject=..., body=...,
+scheduled_send_at="YYYY-MM-DDTHH:MM:SS", access_token=...).
+
+PHONE — there is NO disable_alarm. Use show_alarms, then update_alarm(
+alarm_id=..., enabled=False, access_token=...) to disable, or delete_alarm.
+Text: send_text_message(phone_number=..., message=..., access_token=...).
+Current time: get_current_date_and_time().
+
+SIMPLE_NOTE — there is NO show_notes. Use search_notes (list) then
+show_note(note_id=...) for content.
+
+AMAZON — removing a cart item is delete_product_from_cart(product_id=...,
+access_token=...) (NOT remove_product_from_cart); clear_cart() empties it.
+Also: show_wish_list show_cart add_product_to_cart move_product_from_wish_list_to_cart
+place_order show_payment_cards show_addresses show_prime_subscriptions show_orders.
+Wrong: show_wishlist add_to_cart remove_product_from_cart show_payment_methods.
+
+=== PAYMENT CARDS (critical) ===
+- NEVER call add_payment_card with made-up numbers. Use the user's EXISTING
+  cards from show_payment_cards(access_token=...).
+- Fields: payment_card_id, expiry_year, expiry_month. No is_active field.
+- A card is VALID if it is not expired relative to the SIMULATED current date
+  (get it from apis.phone.get_current_date_and_time — the world is in 2023, do
+  NOT hardcode 2024 or use datetime.now()). Valid if expiry_year > cur_year OR
+  (expiry_year == cur_year AND expiry_month >= cur_month). Pick any valid card.
+- NEVER use payment_cards[0] blindly — loop ALL cards and pick the first valid one.
+- If place_order says a card has expired, try the NEXT valid card.
+- If place_order says insufficient balance, try the NEXT valid card.
+- NEVER add_payment_card to fix expiry or balance issues.
+
+=== NEVER STUB / NEVER GUESS RECIPIENTS ===
+- NEVER leave an API call commented out or replace it with a print placeholder.
+  If the task says create an expense, actually CALL apis.splitwise.create_expense
+  (look up its exact params via show_api_doc first).
+- NEVER fabricate email addresses like name@example.com. Get real emails from
+  apis.phone.search_contacts (by name/relationship) or gmail search_users.
+
 - Reply with EXACTLY ONE Python code block per turn, nothing else:
   ```python
   # your code
@@ -85,6 +149,84 @@ RULES:
      Example: if asked "how many hours", answer=15  (NOT "15 hours", NOT a sentence).
 - Before calling complete_task, ask: "Is this a question, or an action?"
   If action -> answer=None. If question -> answer=<bare value only>.
+
+=== KNOWN ENVIRONMENT FACTS (use these exact shapes; do NOT re-derive them) ===
+- apis.supervisor.show_account_passwords() returns a LIST of
+  {"account_name","password"}. Get one: next(p["password"] for p in pwds if
+  p["account_name"]=="<app>").
+- apis.supervisor.show_addresses() returns a LIST of
+  {"name","street_address","city","state","country","zip_code"} where name is
+  "Home" or "Work". There is NO address_id, NO type, NO label. Do NOT use this
+  for amazon place_order.
+- For amazon shipping: apis.amazon.show_addresses(access_token=...) returns
+  {"address_id","name","street_address",...}. Pick home with name=="Home", use
+  its address_id in place_order.
+  NEVER use address_type, type, label, or 'home' lowercase — the field is
+  name and the value is exactly "Home" (capital H):
+    home = next(a for a in apis.amazon.show_addresses(access_token=t) if a["name"]=="Home")
+    address_id = home["address_id"]
+  Do NOT use addresses[0] blindly — verify name=="Home".
+- ALL list endpoints return a PLAIN LIST. Never use .get("success")/.get("threads").
+- LOGIN usernames: gmail/amazon/spotify/file_system/venmo/simple_note use the
+  user's EMAIL. phone uses the PHONE NUMBER (a digit string), NOT the email.
+- gmail threads: fields are "email_thread_id"(int), "email_ids"(list),
+  "starred"(bool), "archived"(bool). There is NO "id"/"is_starred"/"participants".
+- gmail show_thread(email_thread_id=...) returns {"emails":[{"email_id",
+  "subject","sender":{"email"},"recipients":[{"email"}], ...}]}.
+- gmail reply_to_email and forward_email_from_thread need BOTH email_thread_id
+  AND email_id (ints). forward and download_attachment ALSO need a
+  file_system_access_token.
+- file_system: there is NO read_file. To read a file use show_file(file_path=...,
+  access_token=...) which returns {"content": "..."}. To list use show_directory.
+  Paths use the real home dir (resolve ~ by listing the directory first).
+- amazon orders: fields are "created_at" and "paid_amount" (NOT order_date/
+  total_amount). show_orders is sorted newest-first.
+- amazon products (search_products): items have "product_id"(not id), "rating",
+  "num_product_reviews"(NOT review_count), "price", "product_type", "name".
+  Filter/sort with these exact keys.
+- amazon payment cards: see PAYMENT CARDS (critical) above. show_payment_cards — NOT
+  show_payment_methods.
+- amazon place_order(payment_card_id, address_id, access_token) orders the ENTIRE
+  CART. So BEFORE placing an order for "X", make sure the cart contains ONLY X:
+  call show_cart, and delete_product_from_cart for anything not requested (or only
+  add exactly what's asked to an otherwise-empty-relevant cart). Verify with
+  show_cart before place_order.
+  place_order ALWAYS needs all three: access_token, payment_card_id, address_id.
+  If you get "field required", you forgot one — do NOT call place_order with only
+  access_token.
+- amazon show_wish_list items have product_id, product_name, quantity, price.
+  To order wishlist: move_product_from_wish_list_to_cart(product_id=..., access_token=...)
+  then place_order with valid card + Home address_id.
+- amazon initiate_return needs order_id, product_id, quantity, deliverer_id.
+  show_return_deliverers gives deliverers; FedEx is one of them (match by name).
+- venmo create_transaction(receiver_email, amount, description, access_token)
+  SENDS money; there's a separate request API. transaction fields: "amount",
+  "description","sender","receiver".
+- phone APIs need a PHONE access_token from apis.phone.login(username=<phone
+  number>, password=...). Never pass an amazon/gmail token to phone APIs.
+- RELATIONSHIP RECIPIENTS (husband/wife/partner/roommate/coworker/friend/manager):
+  get them from apis.phone.search_contacts(relationship="<rel>", access_token=...)
+  — each contact has "email" and "phone_number". Do NOT guess via gmail search_users.
+  For "the REST of my roommates", exclude the original sender.
+
+=== BEHAVIOR RULES ===
+- ONE STEP PER TURN: do NOT cram login+search+order+complete_task into one block.
+  Run one small action, print/inspect the result, then proceed on the next turn.
+- If you get "No API named X", call show_api_descriptions immediately — do NOT
+  guess another variant of X (see EXACT API NAMES above).
+- If you get KeyError on a field name, STOP guessing alternates (id/type/label/
+  is_active/address_type/review_count/emails). Print list(item.keys()) from the
+  last API response, then use those exact keys.
+- If place_order says "payment card has expired" or "insufficient balance", try
+  the next valid card from show_payment_cards — never add_payment_card.
+- NEVER stub: if an action is required, call the real API — no commented-out
+  calls and no print("would send...") placeholders.
+- IDEMPOTENT ACTIONS: If an API returns 422 "already starred/unstarred/liked/
+  downloaded/friends/returned", treat it as SUCCESS and CONTINUE. Never loop
+  retrying the same call. Wrap such calls in try/except and ignore that message.
+- COWORKER/RELATION FILTERING for emails: identify the people first (phone
+  contacts by relationship), collect their emails, THEN match threads by
+  sender/recipient email against that set.
 
 === RESPONSE SHAPE RULES ===
 - Most AppWorld list endpoints return a PLAIN LIST, not a dict. Do NOT call
@@ -109,9 +251,8 @@ RULES:
     print(apis.api_docs.show_app_descriptions())
     print(apis.api_docs.show_api_descriptions(app_name='<app>'))
     print(apis.api_docs.show_api_doc(app_name='<app>', api_name='<api>'))
-- To act on the supervisor's accounts, get credentials and log in:
-    print(apis.supervisor.show_account_passwords())
-    # then call that app's login API to get an access_token, and pass it onward.
+- To act on the supervisor's accounts, get credentials once with
+  show_account_passwords(), log in once per app, extract ["access_token"], reuse.
 - Work in small steps: inspect results before the next action. Never invent API
   names or fields — look them up first.
 - First read the relevant api_docs. Use show_api_descriptions(app_name=...) for
@@ -121,10 +262,6 @@ RULES:
   you call it.
 - Do not call show_api_doc for every API in an app. Pull the exact API doc only
   after choosing the API from show_api_descriptions.
-- Before calling any app's login API, read its doc with show_api_doc(..., api_name='login').
-  Login almost always takes username=<supervisor email> and password=<matching password>.
-  show_account_passwords() returns account_name (e.g. "spotify") — that is NOT the username.
-  Use the supervisor's email from the task context as username; never pass account_name=.
 - Fetch supervisor passwords once, then log into only the apps needed for the task.
 - Execute exactly one step at a time, and verify the result before proceeding.
 
@@ -252,7 +389,7 @@ def format_supervisor(supervisor: dict) -> str:
     return (
         f"Name: {name}\n"
         f"Email (use as username for app logins): {email}\n"
-        f"Phone: {phone}"
+        f"Phone (use as username for phone app login, digits only): {phone}"
     )
 
 
@@ -331,15 +468,45 @@ def check_task_completed(world: AppWorld) -> tuple[bool, Optional[str]]:
 def solve(world: AppWorld) -> None:
     trace = new_trace(world)
     write_trace(trace)
-    messages = [{
-        "role": "user",
-        "content": (
-            f"{format_supervisor(world.task.supervisor)}\n\n"
-            f"Task: {world.task.instruction}\n\n"
-            "Begin. Remember: one python code block per turn."
-        ),
-    }]
+    task_id = trace["task_id"]
+    instruction = world.task.instruction
+    initial_hydra = HYDRA.retrieve(
+        f"AppWorld agent task: {instruction}\n"
+        "login access_token API names amazon gmail phone place_order"
+    )
+    user_content = (
+        f"{format_supervisor(world.task.supervisor)}\n\n"
+        f"Task: {instruction}\n\n"
+    )
+    if initial_hydra:
+        user_content += HYDRA.format_block(initial_hydra, "HYDRADB CONTEXT (retrieved hints)") + "\n"
+    user_content += (
+        "Begin. Remember: one python code block per turn. "
+        "Extract login tokens with [\"access_token\"]; phone login uses the phone number."
+    )
+    messages = [{"role": "user", "content": user_content}]
     for step in range(MAX_INTERACTIONS):
+        if step > 0 and HYDRA.enabled and trace["steps"]:
+            last = trace["steps"][-1]
+            obs = str(last.get("observation") or "")
+            failed = (
+                last.get("execution_error")
+                or "Execution failed" in obs
+                or "Exception:" in obs
+                or "401" in obs
+                or "422" in obs
+                or "KeyError" in obs
+            )
+            if failed:
+                hint = HYDRA.retrieve(error_query(instruction, obs))
+                if hint:
+                    messages.append({
+                        "role": "user",
+                        "content": HYDRA.format_block(
+                            hint,
+                            "HYDRADB CONTEXT (relevant to last error — apply these patterns)",
+                        ),
+                    })
         try:
             reply = call_llm(messages)
         except Exception:
@@ -374,6 +541,14 @@ def solve(world: AppWorld) -> None:
             "completion_error": completion_error,
             "completed": completed,
         })
+        HYDRA.remember_step(
+            task_id=task_id,
+            step=step + 1,
+            instruction=instruction,
+            code=code,
+            observation=str(output),
+            succeeded=completed and not execution_error,
+        )
         write_trace(trace)
         messages.append({"role": "assistant", "content": reply})
         messages.append({"role": "user", "content": f"Execution output:\n{output}"})
@@ -390,6 +565,7 @@ def solve(world: AppWorld) -> None:
 
 
 def main() -> None:
+    HYDRA.bootstrap()
     task_ids = resolve_task_ids(DATASET)
     if MAX_TASKS:
         task_ids = task_ids[:MAX_TASKS]

@@ -1,0 +1,203 @@
+"""HydraDB v2 integration — retrieve AppWorld hints and store episodic memories."""
+
+from __future__ import annotations
+
+import json
+import os
+import time
+from pathlib import Path
+from typing import Any, Optional
+
+try:
+    from hydra_db import HydraDB
+    from hydra_db.helpers import build_string
+except ImportError:
+    HydraDB = None  # type: ignore[misc, assignment]
+    build_string = None  # type: ignore[misc, assignment]
+
+# Condensed playbook seeded once as knowledge (mirrors critical SYSTEM_PROMPT facts).
+APPWORLD_KNOWLEDGE_SEED = """AppWorld agent playbook — use these exact patterns.
+
+LOGIN: token = apis.<app>.login(username=..., password=...)["access_token"]
+Never pass the login dict as access_token (causes 401). Phone login username = phone digits; others = email.
+Log in once per app and reuse tokens.
+
+API NAMES (exact): gmail.show_inbox_threads show_outbox_threads show_thread show_drafts
+delete_draft send_email create_draft. NO show_threads show_emails show_inbox list_drafts.
+amazon.show_wish_list show_cart add_product_to_cart delete_product_from_cart (NOT remove_product_from_cart)
+clear_cart place_order show_payment_cards show_addresses.
+phone.show_alarms update_alarm(enabled=False) send_text_message get_current_date_and_time.
+NO disable_alarm. simple_note.search_notes show_note (NOT show_notes).
+Wrong: list_drafts show_wishlist add_to_cart remove_product_from_cart show_payment_methods.
+
+ADDRESSES: amazon.show_addresses has name "Home"/"Work" and address_id. Use name=="Home" for shipping.
+NEVER address_type type label or lowercase home. supervisor.show_addresses has NO address_id.
+
+PAYMENT CARDS: show_payment_cards fields payment_card_id expiry_year expiry_month. No is_active field.
+Use apis.phone.get_current_date_and_time for simulated 2023 date (NOT datetime.now()). Valid if
+expiry_year > cur_year OR (expiry_year==cur_year AND expiry_month>=cur_month). On expired/balance try next card.
+Never add_payment_card with fake numbers. Never stub actions with print placeholders.
+
+PLACE_ORDER: requires access_token payment_card_id address_id. Orders ENTIRE cart — show_cart first,
+remove unwanted items. Wishlist order: move_product_from_wish_list_to_cart then place_order.
+
+ANSWERS: action tasks -> complete_task(answer=None). Questions -> bare number/string only.
+
+PHONE: phone APIs need phone_token from phone.login(username=phone_number). search_contacts for partner/roommate emails.
+
+GMAIL: email_thread_id starred archived. show_thread for details. Plain lists not .get("success").
+
+AMAZON PRODUCTS: product_id num_product_reviews (not review_count) rating price name product_type.
+"""
+
+
+class HydraContext:
+    """Optional HydraDB client for retrieval-augmented agent steps."""
+
+    def __init__(
+        self,
+        *,
+        api_key: Optional[str] = None,
+        tenant_id: Optional[str] = None,
+        max_results: int = 5,
+        graph_context: bool = True,
+        seed_knowledge: bool = True,
+        cache_dir: Path = Path("traces"),
+    ) -> None:
+        self.api_key = api_key or os.environ.get("HYDRA_DB_API_KEY") or os.environ.get("HYDRA_API_KEY")
+        self.tenant_id = tenant_id or os.environ.get("HYDRA_TENANT_ID") or os.environ.get(
+            "APPWORLD_EXPERIMENT", "hack_agent_arena"
+        )
+        self.max_results = int(os.environ.get("HYDRA_MAX_RESULTS", str(max_results)))
+        self.graph_context = os.environ.get("HYDRA_GRAPH_CONTEXT", "1") not in ("0", "false", "False")
+        self.seed_knowledge = os.environ.get("HYDRA_SEED_KNOWLEDGE", "1" if seed_knowledge else "0") not in (
+            "0", "false", "False"
+        )
+        self.cache_dir = cache_dir
+        self.enabled = bool(self.api_key) and HydraDB is not None and os.environ.get(
+            "HYDRA_ENABLED", "1"
+        ) not in ("0", "false", "False")
+        self.client: Any = None
+        self._bootstrapped = False
+
+    def bootstrap(self) -> None:
+        if not self.enabled:
+            return
+        try:
+            self.client = HydraDB(token=self.api_key)
+            self._ensure_tenant_ready()
+            if self.seed_knowledge:
+                self._seed_playbook_if_needed()
+            self._bootstrapped = True
+            print(f"  HydraDB ready (tenant={self.tenant_id})")
+        except Exception as exc:
+            self.enabled = False
+            print(f"  ! HydraDB disabled: {exc}")
+
+    def retrieve(self, query: str, *, search_type: str = "all") -> str:
+        if not self.enabled or not self.client or not query.strip():
+            return ""
+        try:
+            response = self.client.query(
+                tenant_id=self.tenant_id,
+                query=query.strip(),
+                type=search_type,
+                max_results=self.max_results,
+                graph_context=self.graph_context,
+            )
+            text = build_string(response).strip()
+            if text == "No relevant context found.":
+                return ""
+            return text
+        except Exception:
+            return ""
+
+    def remember(self, text: str) -> None:
+        if not self.enabled or not self.client or not text.strip():
+            return
+        try:
+            self.client.context.ingest(
+                type="memory",
+                tenant_id=self.tenant_id,
+                memories=json.dumps([{"text": text.strip()[:4000]}]),
+            )
+        except Exception:
+            pass
+
+    def remember_step(
+        self,
+        *,
+        task_id: str,
+        step: int,
+        instruction: str,
+        code: str,
+        observation: str,
+        succeeded: bool,
+    ) -> None:
+        status = "success" if succeeded else "failure"
+        obs_preview = observation.strip().replace("\n", " ")[:600]
+        code_preview = code.strip().replace("\n", " ")[:400]
+        text = (
+            f"[{status}] task={task_id} step={step}\n"
+            f"Instruction: {instruction[:300]}\n"
+            f"Code: {code_preview}\n"
+            f"Observation: {obs_preview}"
+        )
+        self.remember(text)
+
+    def _ensure_tenant_ready(self, timeout_s: int = 120) -> None:
+        assert self.client is not None
+        try:
+            self.client.tenants.create(tenant_id=self.tenant_id)
+        except Exception:
+            pass
+        deadline = time.time() + timeout_s
+        while time.time() < deadline:
+            status = self.client.tenants.status(tenant_id=self.tenant_id)
+            infra = status.data.infra if status.data else None
+            if infra and getattr(infra, "ready_for_ingestion", False):
+                return
+            time.sleep(2)
+        raise TimeoutError(f"HydraDB tenant {self.tenant_id!r} not ready for ingestion")
+
+    def _seed_marker(self) -> Path:
+        safe = "".join(c if c.isalnum() or c in "._-" else "_" for c in self.tenant_id)
+        return self.cache_dir / f".hydra_seeded_{safe}"
+
+    def _seed_playbook_if_needed(self) -> None:
+        assert self.client is not None
+        marker = self._seed_marker()
+        if marker.is_file():
+            return
+        self.cache_dir.mkdir(parents=True, exist_ok=True)
+        doc_name = "appworld_agent_playbook.txt"
+        ingest = self.client.context.ingest(
+            type="knowledge",
+            tenant_id=self.tenant_id,
+            documents=[(doc_name, APPWORLD_KNOWLEDGE_SEED.encode("utf-8"), "text/plain")],
+        )
+        source_id = ingest.data.results[0].id
+        deadline = time.time() + 180
+        while time.time() < deadline:
+            st = self.client.context.status(tenant_id=self.tenant_id, ids=[source_id])
+            indexing_status = st.data.statuses[0].indexing_status
+            if indexing_status == "completed":
+                marker.write_text(source_id, encoding="utf-8")
+                return
+            if indexing_status == "errored":
+                err = getattr(st.data.statuses[0], "error_message", indexing_status)
+                raise RuntimeError(f"HydraDB seed failed: {err}")
+            time.sleep(2)
+        raise TimeoutError("HydraDB knowledge seed indexing timed out")
+
+    def format_block(self, text: str, title: str = "HYDRADB CONTEXT") -> str:
+        if not text:
+            return ""
+        return f"=== {title} ===\n{text}\n"
+
+
+def error_query(instruction: str, observation: str, limit: int = 500) -> str:
+    obs = observation.strip()
+    if len(obs) > limit:
+        obs = obs[-limit:]
+    return f"AppWorld task: {instruction}\nError or failure:\n{obs}"
