@@ -98,8 +98,8 @@ RULES:
 - Re-read the task and act on EXACTLY what it specifies:
   * "all weightlifting benches in my cart" = ONLY those items, not the whole cart.
   * "two same-colored T-shirts" = quantity 2 of ONE product, check inventory.
-  * recipients/contacts: look up the REAL email/phone from phone contacts or
-    gmail search_users — never invent placeholders like "husband@example.com".
+  * recipients/contacts: look up REAL email/phone from apis.phone.search_contacts
+    (by relationship or name) — never invent placeholders like "husband@example.com".
 - After doing the action, do a quick read-back to confirm the intended state,
   THEN call complete_task(answer=None) for action tasks.
 
@@ -172,22 +172,43 @@ PLANNING:
 
 
 def call_llm(messages: list[dict]) -> str:
+    model = MODEL
     kwargs = {
-        "model": MODEL,
+        "model": model,
         "messages": [{"role": "system", "content": SYSTEM_PROMPT}, *messages],
         "max_tokens": 2500,
         "temperature": 0.0,
         "num_retries": LLM_NUM_RETRIES,   # ride out free-tier rate limits (429) with backoff
     }
-    if MODEL.startswith("groq/"):
+    if model.startswith("groq/"):
         groq_api_key = os.environ.get("GROQ_API_KEY")
         if not groq_api_key:
             raise RuntimeError("GROQ_API_KEY is required for MODEL=groq/...")
+        if groq_api_key.startswith("sk-or-"):
+            raise RuntimeError(
+                "GROQ_API_KEY looks like an OpenRouter key (sk-or-...). "
+                "Use OPENROUTER_API_KEY + MODEL=openrouter/<model> instead, "
+                "or put a Groq key (gsk_...) from console.groq.com in GROQ_API_KEY."
+            )
         kwargs.update({
-            "model": MODEL.split("/", 1)[1],
+            "model": model.split("/", 1)[1],
             "custom_llm_provider": "groq",
             "api_key": groq_api_key,
         })
+    elif model.startswith("openrouter/") or (
+        os.environ.get("OPENROUTER_API_KEY")
+        and not model.startswith(("groq/", "openai/", "anthropic/", "gemini/", "ollama/"))
+    ):
+        openrouter_api_key = os.environ.get("OPENROUTER_API_KEY")
+        if not openrouter_api_key:
+            raise RuntimeError(
+                "OPENROUTER_API_KEY is required. Set MODEL=openrouter/<slug> "
+                "(e.g. openrouter/meta-llama/llama-3.3-70b-instruct:free)."
+            )
+        if not model.startswith("openrouter/"):
+            model = f"openrouter/{model}"
+        kwargs["model"] = model
+        kwargs["api_key"] = openrouter_api_key
     resp = litellm.completion(**kwargs)
     return resp.choices[0].message.content or ""
 
