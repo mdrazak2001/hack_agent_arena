@@ -99,11 +99,24 @@ email_thread_id=...). Drafts: show_drafts / delete_draft(draft_id=...).
 Send: send_email(email_addresses=[...], subject=..., body=..., access_token=...).
 Schedule: create_draft(recipient_email_addresses=[...], subject=..., body=...,
 scheduled_send_at="YYYY-MM-DDTHH:MM:SS", access_token=...).
+Meeting reminders: ONLY create_draft (NEVER send_email). Subject exactly
+"Meeting '<meeting_name>' Starting Soon". Body must be empty string "".
+scheduled_send_at = meeting start minus 20 minutes. Recipients = all attendee
+emails from phone.search_contacts(query=<first_name>) excluding yourself.
+Parse meeting name/day/time from simple_note markdown; map Day to this week's date.
 
 PHONE — there is NO disable_alarm. Use show_alarms, then update_alarm(
 alarm_id=..., enabled=False, access_token=...) to disable, or delete_alarm.
 Alarm fields: alarm_id, time, repeat_days, label, enabled — NO "description".
-Match alarms by label or time, not description.
+show_alarms DEFAULT page_limit is 5 — you MUST paginate (page_limit=20,
+page_index=0,1,...) or you miss most alarms.
+DISABLE MEETING ALARMS: paginate show_alarms fully. Paginate gmail
+show_inbox_threads(query="cancel") too. Read cancel/skip emails (subjects like
+"Cancel Meeting?", "Skip this time?", "Cannot make it") from coworkers — extract
+the sender's FIRST name from sender["name"]. Disable every alarm whose label
+contains that first name (e.g. label "One-on-One with Catherine" for sender
+"Catherine Smith"). Do NOT match canceler name to unrelated alarms; do NOT
+disable reunion/social alarms unless the email clearly cancels a 1:1 meeting.
 Text: send_text_message(phone_number=..., message=..., access_token=...).
 Current time: get_current_date_and_time().
 
@@ -113,8 +126,15 @@ show_note(note_id=...) for content.
 SPLITWISE — there is NO create_expense, add_expense, or create_transaction
 (venmo has create_transaction; splitwise does NOT). The ONLY way to add a bill is
 record_expense(description=..., paid_amount=..., payer_email=..., debtor_emails=[...],
-access_token=..., group_id=...). Get group_id from show_groups(access_token=...).
-Get roommate emails from phone.search_contacts(relationship="roommate").
+access_token=..., group_id=...). Get group_id from show_groups(access_token=...)
+— field is group_id (NOT id). Pick the group whose members are your roommates
+(all member emails from show_groups, NOT phone contacts).
+CABLE BILL EMAILS: emails use created_at (NOT sent_at). Cost is NOT in the body —
+download the attachment (see GMAIL ATTACHMENTS), read "Total Amount => $NNN" from
+the file. Description format exactly: "cable bill [MM-YY]" (e.g. June 2023 bill →
+"cable bill [06-23]"). Filter to current calendar year only. debtor_emails must be
+Splitwise group member emails (e.g. gl.moore@gmail.com) — using phone roommate
+contacts causes "not a member of the group" errors.
 
 AMAZON — removing a cart item is delete_product_from_cart(product_id=...,
 access_token=...) (NOT remove_product_from_cart); clear_cart() empties it.
@@ -257,8 +277,16 @@ Find husband/partner emails via show_inbox_threads(query="...") then show_thread
   If you get "field required", you forgot one — do NOT call place_order with only
   access_token.
 - amazon show_wish_list items have product_id, product_name, quantity, price.
-  To order wishlist: move_product_from_wish_list_to_cart(product_id=..., access_token=...)
-  then place_order with valid card + Home address_id.
+  To order wishlist: clear_cart() first, then for EACH wishlist item call
+  move_product_from_wish_list_to_cart(product_id=..., quantity=item["quantity"],
+  access_token=...) — quantity defaults to 1 if omitted (WRONG for multi-qty items).
+  Verify cart matches wishlist, then place_order with valid card + Home address_id.
+- "Highest rated" / "best rated" in a price range: search_products with exact
+  product_type and min/max price, then pick max(rating) — do NOT add rating>4 or
+  other arbitrary thresholds (best item may be 3.9). Order ONLY that product_type.
+- "Order ONE watch/item under $X from trusted seller": clear_cart(), search with
+  product_type filter + max price, filter seller_id in trusted set from past orders,
+  add_product_to_cart(quantity=1) for ONE product only, verify len(cart["cart_items"])==1.
 - amazon initiate_return needs order_id, product_id, quantity, deliverer_id.
   show_return_deliverers gives deliverers; FedEx is one of them (match by name).
 - venmo create_transaction(receiver_email, amount, description, access_token)
@@ -378,11 +406,17 @@ RUNTIME_HINTS = """Quick reference (copy when needed):
 - Date: now=apis.phone.get_current_date_and_time(); today=datetime.datetime.strptime(now["date"], "%A, %B %d, %Y"); cur_year,cur_month=today.year,today.month
 - Prime end_date: datetime.datetime.strptime(s["end_date"], "%Y-%m-%dT%H:%M:%S")
 - Cart items: cart=apis.amazon.show_cart(...); for item in cart["cart_items"]: ...
+- Wishlist order: clear_cart(); move_product_from_wish_list_to_cart(product_id=..., quantity=item["quantity"], ...)
+- Best rated in range: filter product_type+price, max(rating) — NO rating>4 threshold
+- Single item order: clear_cart(); add qty=1; verify len(cart["cart_items"])==1 before place_order
 - Low stock / each roommate: for _ in roommates: clear_cart(); add_product_to_cart(qty=1); place_order()
 - Drafts: re-fetch show_drafts() before delete; 409 does not exist = OK
+- Meeting reminders: create_draft ONLY (not send_email); body=""; scheduled_send_at=meeting-20min
 - Attachment: att["id"] not attachment_id; download needs gmail_token + file_system_access_token
 - File path: use download_attachment["file_path"] exactly; /home/carl/downloads lowercase
-- Splitwise: apis.splitwise.record_expense ONLY — NOT add_expense/create_expense/create_transaction
+- Splitwise: record_expense; group_id from show_groups; debtor_emails=group member emails
+- Cable bill: email created_at; parse Total Amount from attachment; desc "cable bill [MM-YY]"
+- Alarms: paginate show_alarms(page_limit=20); match cancel email sender first name to label
 - API lookup: apis.api_docs.show_api_descriptions(app_name='splitwise') — NOT apis.splitwise.show_api_descriptions
 - Alarm: use label not description; Amazon seller: seller_id via show_product not order["seller"]
 - Token: apis.<app>.login(...)["access_token"]
