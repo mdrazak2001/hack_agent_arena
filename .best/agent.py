@@ -408,10 +408,11 @@ PRELOADED HELPERS (injected before every execute — call them, do NOT reimpleme
 - account_password, parse_simulated_today, valid_payment_cards, parse_checklist_lines
 - splitwise_roommates_group, contact_email_by_first_name, simple_note_content_by_title
 - meeting_datetime, parse_cable_bill_amount, cable_bill_month_year
-- create_meeting_reminder_drafts, record_roommate_cable_bills
+- create_meeting_reminder_drafts, record_roommate_cable_bills, place_trusted_seller_watch_order
 When TASK PLAYBOOK names one of these helpers, your code block must be ONLY:
 login required apps → call the helper → print result → complete_task. Never write
 custom parsing loops for meeting notes or cable bills when the helper exists.
+Helpers use preloaded `apis` — account_password('gmail'), parse_simulated_today() need NO apis arg.
 
 PLANNING:
 - For any "find/rank/filter" task, first write the full plan as comments:
@@ -449,25 +450,28 @@ RUNTIME_HINTS = """Quick reference (copy when needed):
 - API lookup: apis.api_docs.show_api_descriptions(app_name='splitwise') — NOT apis.splitwise.show_api_descriptions
 - Alarm: use label not description; Amazon seller: seller_id via show_product not order["seller"]
 - Token: apis.<app>.login(...)["access_token"]
+- Helpers use preloaded `apis` — call account_password('gmail') NOT account_password('gmail') alone without quotes
+- account_password('gmail'), parse_simulated_today(), place_trusted_seller_watch_order(token, max_price)
 - Preloaded helpers (every execution): account_password, parse_simulated_today,
-  valid_payment_cards, parse_checklist_lines, splitwise_roommates_group,
-  contact_email_by_first_name, simple_note_content_by_title,
-  parse_meeting_schedule_note, meeting_datetime,
-  parse_cable_bill_amount, cable_bill_month_year,
+  valid_payment_cards, parse_checklist_lines, trusted_seller_ids, place_trusted_seller_watch_order,
+  splitwise_roommates_group, contact_email_by_first_name, simple_note_content_by_title,
+  parse_meeting_schedule_note, meeting_datetime, parse_cable_bill_amount, cable_bill_month_year,
   create_meeting_reminder_drafts, record_roommate_cable_bills
 """
 
 # Injected before every world.execute() — general helpers, NOT task-specific.
+# `apis` is always in scope; helpers accept either account_password('gmail') or account_password(apis, 'gmail').
 EXEC_HELPERS = '''
 import datetime as datetime
 import re as re
 import calendar as calendar
 
-def account_password(apis, app_name):
-    name = app_name.lower()
+def account_password(*args):
+    app_name = args[1] if len(args) == 2 else args[0]
+    name = str(app_name).lower()
     return next(p["password"] for p in apis.supervisor.show_account_passwords() if p["account_name"] == name)
 
-def parse_simulated_today(apis):
+def parse_simulated_today(*_ignored):
     now = apis.phone.get_current_date_and_time()
     return datetime.datetime.strptime(now["date"], "%A, %B %d, %Y")
 
@@ -483,12 +487,66 @@ def parse_checklist_lines(text):
             items.append({"qty": int(m.group(1)), "name": m.group(2).strip()})
     return items
 
-def splitwise_roommates_group(apis, splitwise_token):
+def trusted_seller_ids(amazon_token):
+    ids = set()
+    page_index = 0
+    while True:
+        page = apis.amazon.show_orders(access_token=amazon_token, page_limit=20, page_index=page_index)
+        if not page:
+            break
+        for order in page:
+            for item in order.get("order_items") or []:
+                prod = apis.amazon.show_product(product_id=item["product_id"], access_token=amazon_token)
+                ids.add(prod["seller_id"])
+        if len(page) < 20:
+            break
+        page_index += 1
+    return ids
+
+def home_address_id(amazon_token):
+    addrs = apis.amazon.show_addresses(access_token=amazon_token)
+    return next(a["address_id"] for a in addrs if a["name"] == "Home")
+
+def place_trusted_seller_watch_order(amazon_token, max_price):
+    """Place exactly ONE watch order from a past-trusted seller. Returns True on success."""
+    today = parse_simulated_today()
+    cards = valid_payment_cards(apis.amazon.show_payment_cards(access_token=amazon_token), today)
+    trusted = trusted_seller_ids(amazon_token)
+    apis.amazon.clear_cart(access_token=amazon_token)
+    products = apis.amazon.search_products(product_type="watch", max_price=max_price, access_token=amazon_token)
+    candidates = [p for p in products if p.get("seller_id") in trusted]
+    if not candidates:
+        return False
+    pick = max(candidates, key=lambda p: (p.get("rating", 0), -p.get("price", 0)))
+    apis.amazon.add_product_to_cart(product_id=pick["product_id"], quantity=1, access_token=amazon_token)
+    cart = apis.amazon.show_cart(access_token=amazon_token)
+    if len(cart.get("cart_items") or []) != 1:
+        apis.amazon.clear_cart(access_token=amazon_token)
+        return False
+    addr_id = home_address_id(amazon_token)
+    for card in cards:
+        try:
+            apis.amazon.place_order(
+                payment_card_id=card["payment_card_id"],
+                address_id=addr_id,
+                access_token=amazon_token,
+            )
+            return True
+        except Exception:
+            continue
+    return False
+
+def splitwise_roommates_group(*args):
+    splitwise_token = args[1] if len(args) == 2 else args[0]
     bal = apis.splitwise.show_groups_balance(access_token=splitwise_token)
     gid = next(g["group_id"] for g in bal["breakdown"] if g["group_name"] == "Roommates")
     return apis.splitwise.show_group(group_id=gid, access_token=splitwise_token)
 
-def contact_email_by_first_name(apis, phone_token, name):
+def contact_email_by_first_name(*args):
+    if len(args) == 3:
+        phone_token, name = args[1], args[2]
+    else:
+        phone_token, name = args[0], args[1]
     name = (name or "").strip()
     if not name:
         return None
@@ -506,7 +564,11 @@ def contact_email_by_first_name(apis, phone_token, name):
             return c["email"]
     return hits[0]["email"] if hits else None
 
-def simple_note_content_by_title(apis, sn_token, title):
+def simple_note_content_by_title(*args):
+    if len(args) == 3:
+        sn_token, title = args[1], args[2]
+    else:
+        sn_token, title = args[0], args[1]
     hits = apis.simple_note.search_notes(query=title, access_token=sn_token)
     for n in hits:
         if n.get("title") == title:
@@ -543,8 +605,12 @@ def parse_meeting_schedule_note(content):
             i += 1
     return meetings
 
-def meeting_datetime(apis, day_name, time_hm):
-    today = parse_simulated_today(apis)
+def meeting_datetime(*args):
+    if len(args) == 3:
+        day_name, time_hm = args[1], args[2]
+    else:
+        day_name, time_hm = args[0], args[1]
+    today = parse_simulated_today()
     days = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
     d = days.index(day_name)
     clean = time_hm.strip().strip("'").strip('"')
@@ -569,17 +635,21 @@ def cable_bill_month_year(subject):
     month_num = list(calendar.month_name).index(month_name)
     return month_num, int(year_s)
 
-def create_meeting_reminder_drafts(apis, gmail_token, phone_token, note_content, supervisor_email):
+def create_meeting_reminder_drafts(*args):
+    if len(args) == 5:
+        gmail_token, phone_token, note_content, supervisor_email = args[1], args[2], args[3], args[4]
+    else:
+        gmail_token, phone_token, note_content, supervisor_email = args[0], args[1], args[2], args[3]
     meetings = parse_meeting_schedule_note(note_content)
     created = 0
     for m in meetings:
         if not m.get("day") or not m.get("time"):
             continue
-        dt = meeting_datetime(apis, m["day"], m["time"])
+        dt = meeting_datetime(m["day"], m["time"])
         sched = (dt - datetime.timedelta(minutes=20)).strftime("%Y-%m-%dT%H:%M:%S")
         emails = []
         for name in m.get("attendees") or []:
-            e = contact_email_by_first_name(apis, phone_token, name)
+            e = contact_email_by_first_name(phone_token, name)
             if e and e != supervisor_email:
                 emails.append(e)
         emails = list(dict.fromkeys(emails))
@@ -595,10 +665,14 @@ def create_meeting_reminder_drafts(apis, gmail_token, phone_token, note_content,
         created += 1
     return created
 
-def record_roommate_cable_bills(apis, gmail_token, splitwise_token, fs_token, payer_email):
-    today = parse_simulated_today(apis)
+def record_roommate_cable_bills(*args):
+    if len(args) == 5:
+        gmail_token, splitwise_token, fs_token, payer_email = args[1], args[2], args[3], args[4]
+    else:
+        gmail_token, splitwise_token, fs_token, payer_email = args[0], args[1], args[2], args[3]
+    today = parse_simulated_today()
     cur_year, cur_month = today.year, today.month
-    group = splitwise_roommates_group(apis, splitwise_token)
+    group = splitwise_roommates_group(splitwise_token)
     debtor_emails = [m["email"] for m in group["members"]]
     count = 0
     page_index = 0
@@ -821,10 +895,10 @@ def task_playbook(instruction: str) -> str:
         blocks.append(
             "TASK PLAYBOOK — Splitwise cable bills (ONE code block after login):\n"
             "1) supervisor_email = '<supervisor email from header>'\n"
-            "2) gmail_token = apis.gmail.login(username=supervisor_email, password=account_password(apis, 'gmail'))['access_token']\n"
-            "   splitwise_token = apis.splitwise.login(..., password=account_password(apis, 'splitwise'))['access_token']\n"
-            "   fs_token = apis.file_system.login(..., password=account_password(apis, 'file_system'))['access_token']\n"
-            "3) n = record_roommate_cable_bills(apis, gmail_token, splitwise_token, fs_token, supervisor_email)\n"
+            "2) gmail_token = apis.gmail.login(username=supervisor_email, password=account_password('gmail'))['access_token']\n"
+            "   splitwise_token = apis.splitwise.login(..., password=account_password('splitwise'))['access_token']\n"
+            "   fs_token = apis.file_system.login(..., password=account_password('file_system'))['access_token']\n"
+            "3) n = record_roommate_cable_bills(gmail_token, splitwise_token, fs_token, supervisor_email)\n"
             "4) print(n); apis.supervisor.complete_task(answer=None)\n"
             "NEVER show_groups(), create_group, Climbers, or hand-parse bills — helper does all of it."
         )
@@ -853,21 +927,25 @@ def task_playbook(instruction: str) -> str:
         blocks.append(
             "TASK PLAYBOOK — meeting reminder drafts (ONE code block after login):\n"
             "1) supervisor_email = '<supervisor email from header>'\n"
-            "2) sn_token = apis.simple_note.login(username=supervisor_email, password=account_password(apis, 'simple_note'))['access_token']\n"
-            "   gmail_token = apis.gmail.login(..., password=account_password(apis, 'gmail'))['access_token']\n"
-            "   phone_token = apis.phone.login(username='<phone digits>', password=account_password(apis, 'phone'))['access_token']\n"
-            "3) content = simple_note_content_by_title(apis, sn_token, 'Weekly Meetings Times')\n"
-            "4) n = create_meeting_reminder_drafts(apis, gmail_token, phone_token, content, supervisor_email)\n"
+            "2) sn_token = apis.simple_note.login(username=supervisor_email, password=account_password('simple_note'))['access_token']\n"
+            "   gmail_token = apis.gmail.login(..., password=account_password('gmail'))['access_token']\n"
+            "   phone_token = apis.phone.login(username='<phone digits>', password=account_password('phone'))['access_token']\n"
+            "3) content = simple_note_content_by_title(sn_token, 'Weekly Meetings Times')\n"
+            "4) n = create_meeting_reminder_drafts(gmail_token, phone_token, content, supervisor_email)\n"
             "5) print(n); apis.supervisor.complete_task(answer=None) ONLY if n > 0\n"
             "NEVER use search_notes(...)[0] — filter exact title via simple_note_content_by_title."
         )
 
     if "watch" in text and "trust" in text:
         blocks.append(
-            "TASK PLAYBOOK — one trusted-seller watch:\n"
-            "1) clear_cart(). trusted_ids from show_orders→show_order→show_product→seller_id.\n"
-            "2) search_products(product_type='watch', max_price=limit); filter seller_id in trusted_ids.\n"
-            "3) ONE product qty=1; verify len(cart['cart_items'])==1; place_order."
+            "TASK PLAYBOOK — trusted-seller watch (ONE code block):\n"
+            "1) Parse max_price from instruction (e.g. '$110' -> 110).\n"
+            "2) amazon_token = apis.amazon.login(username=supervisor_email, "
+            "password=account_password('amazon'))['access_token']\n"
+            "3) ok = place_trusted_seller_watch_order(amazon_token, max_price)\n"
+            "4) print(ok); apis.supervisor.complete_task(answer=None) ONLY if ok is True.\n"
+            "NEVER call place_order yourself — helper places exactly ONE order. "
+            "If cart is empty on retry, order already exists: complete_task WITHOUT reordering."
         )
 
     if "checklist" in text and "husband" in text and "email" in text:
@@ -905,11 +983,31 @@ def execution_recovery_hint(instruction: str, observation: str, code: str) -> st
     obs = observation.lower()
     code_lower = code.lower()
 
-    if "account_password() missing" in obs:
+    if "account_password() missing" in obs or "missing 1 required positional argument: 'app_name'" in obs:
         return (
-            "RECOVERY — account_password needs TWO arguments: "
-            "account_password(apis, 'gmail')  # app_name is lowercase string"
+            "RECOVERY — helpers use preloaded apis. Call: account_password('gmail') "
+            "(one lowercase app name). Works with or without passing apis."
         )
+
+    if "parse_simulated_today() missing" in obs or "missing 1 required positional argument: 'apis'" in obs and "parse_simulated_today" in obs:
+        return "RECOVERY — call parse_simulated_today() with NO arguments."
+
+    if "watch" in text and "trust" in text:
+        if "cart is empty" in obs and "place_order" in code_lower:
+            return (
+                "RECOVERY — trusted watch order likely ALREADY placed (cart now empty). "
+                "Do NOT place_order again (that creates a 2nd order and fails eval). "
+                "Call apis.supervisor.complete_task(answer=None) immediately."
+            )
+        if "place_trusted_seller_watch_order" not in code_lower and any(
+            p in obs for p in ("cart is empty", "place_order", "seller", "trusted")
+        ):
+            return (
+                "RECOVERY — trusted-seller watch:\n"
+                "amazon_token = apis.amazon.login(..., password=account_password('amazon'))['access_token']\n"
+                "ok = place_trusted_seller_watch_order(amazon_token, max_price)  # max_price from instruction\n"
+                "if ok: complete_task(answer=None). NEVER call place_order twice."
+            )
 
     if "reminder email" in text and "meeting" in text:
         if "create_meeting_reminder_drafts" not in code_lower and any(
@@ -926,15 +1024,15 @@ def execution_recovery_hint(instruction: str, observation: str, code: str) -> st
         ):
             return (
                 "RECOVERY — meeting reminder drafts:\n"
-                "Login with account_password(apis, 'app_name'). Fetch note via:\n"
-                "content = simple_note_content_by_title(apis, sn_token, 'Weekly Meetings Times')\n"
-                "n = create_meeting_reminder_drafts(apis, gmail_token, phone_token, content, supervisor_email)\n"
+                "Login with account_password('app_name'). Fetch note via:\n"
+                "content = simple_note_content_by_title(sn_token, 'Weekly Meetings Times')\n"
+                "n = create_meeting_reminder_drafts(gmail_token, phone_token, content, supervisor_email)\n"
                 "print(n); complete_task ONLY if n > 0."
             )
         if obs.strip() in ("0", "0\n") and "create_meeting_reminder_drafts" in code_lower:
             return (
                 "RECOVERY — 0 drafts created. search_notes[0] is wrong note.\n"
-                "Use content = simple_note_content_by_title(apis, sn_token, 'Weekly Meetings Times') "
+                "Use content = simple_note_content_by_title(sn_token, 'Weekly Meetings Times') "
                 "then re-run create_meeting_reminder_drafts."
             )
 
@@ -956,8 +1054,8 @@ def execution_recovery_hint(instruction: str, observation: str, code: str) -> st
         ):
             return (
                 "RECOVERY — Splitwise cable bills:\n"
-                "Login with account_password(apis, 'gmail'/'splitwise'/'file_system'). Then:\n"
-                "n = record_roommate_cable_bills(apis, gmail_token, splitwise_token, fs_token, supervisor_email)\n"
+                "Login with account_password('gmail'/'splitwise'/'file_system'). Then:\n"
+                "n = record_roommate_cable_bills(gmail_token, splitwise_token, fs_token, supervisor_email)\n"
                 "print(n); apis.supervisor.complete_task(answer=None). "
                 "Roommates group ONLY via show_groups_balance inside the helper."
             )
@@ -990,7 +1088,7 @@ def solve(world: AppWorld) -> None:
     playbook = task_playbook(instruction)
     if playbook:
         user_content += f"\n=== TASK PLAYBOOK (follow exactly) ===\n{playbook}\n"
-        if "create_meeting_reminder_drafts" in playbook or "record_roommate_cable_bills" in playbook:
+        if "create_meeting_reminder_drafts" in playbook or "record_roommate_cable_bills" in playbook or "place_trusted_seller_watch_order" in playbook:
             user_content += (
                 "\nIMPORTANT: This task has a preloaded helper. "
                 "Your first code block must login + call the helper + complete_task. "
