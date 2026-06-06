@@ -1,0 +1,665 @@
+{
+  "generated_at": "2026-06-06T16:32:10.621945+00:00",
+  "trace_count": 28,
+  "eval_results": {
+    "5e27cd7_2": true,
+    "ba46d91_2": true,
+    "dbc0276_3": true,
+    "20c1328_3": true,
+    "9871968_2": true,
+    "c1091c7_2": true,
+    "18670a5_3": false,
+    "f6be291_1": true,
+    "23d431c_3": true,
+    "8d42650_3": false
+  },
+  "category_counts": {
+    "FAKE_RECIPIENT": 10,
+    "VALIDATION_422": 31,
+    "TOKEN_MISUSE": 5,
+    "WRONG_API_NAME": 3,
+    "CARD_VALIDITY": 18,
+    "CASING": 7,
+    "LLM_ERROR": 6,
+    "FIELD_KEYERROR": 7,
+    "PAGINATION_MISS": 1
+  },
+  "category_task_counts": {
+    "VALIDATION_422": 9,
+    "CARD_VALIDITY": 6,
+    "FAKE_RECIPIENT": 6,
+    "LLM_ERROR": 6,
+    "FIELD_KEYERROR": 5,
+    "CASING": 3,
+    "TOKEN_MISUSE": 3,
+    "WRONG_API_NAME": 2,
+    "PAGINATION_MISS": 1
+  },
+  "ranked_categories": [
+    "VALIDATION_422",
+    "CARD_VALIDITY",
+    "FAKE_RECIPIENT",
+    "LLM_ERROR",
+    "FIELD_KEYERROR",
+    "CASING",
+    "TOKEN_MISUSE",
+    "WRONG_API_NAME",
+    "PAGINATION_MISS"
+  ],
+  "snippets": {
+    "VALIDATION_422": [
+      "0de03ad_2: Execution failed. Traceback:\n  File \"<python-input>\", line 14, in <module>\n    process_threads(inbox_threads, coworker_emails, access_token)",
+      "0de03ad_2: Execution failed. Traceback:\n  File \"<python-input>\", line 15, in <module>\n    process_threads(inbox_threads, coworker_emails, access_token)",
+      "0de03ad_2: Execution failed. Traceback:\n  File \"<python-input>\", line 15, in <module>\n    process_threads(inbox_threads, coworker_emails, access_token)"
+    ],
+    "CARD_VALIDITY": [
+      "1c4bd27_3: [\n {\n  \"name\": \"show_account\",\n  \"description\": \"Show your account information. Unlike show_profile, this includes private information.\"\n },",
+      "4242c97_1: [\n {\n  \"name\": \"show_account\",\n  \"description\": \"Show your account information. Unlike show_profile, this includes private information.\"\n },",
+      "4242c97_1: Execution failed. Traceback:\n  File \"<python-input>\", line 7, in <module>\n    order_response = apis.amazon.place_order(\n                    "
+    ],
+    "FAKE_RECIPIENT": [
+      "0de03ad_2: {\n \"app_name\": \"gmail\",\n \"api_name\": \"show_inbox_threads\",\n \"path\": \"/email_threads/category/inbox\",\n \"method\": \"GET\",\n \"description\": \"Show",
+      "0de03ad_2: {\n \"app_name\": \"gmail\",\n \"api_name\": \"search_users\",\n \"path\": \"/users\",\n \"method\": \"GET\",\n \"description\": \"Search Gmail users by name or ema",
+      "69ba40f_1: {\n \"app_name\": \"gmail\",\n \"api_name\": \"show_outbox_threads\",\n \"path\": \"/email_threads/category/outbox\",\n \"method\": \"GET\",\n \"description\": \"Sh"
+    ],
+    "LLM_ERROR": [
+      "258796c_2: Traceback (most recent call last):\n  File \"C:\\Users\\moham\\Projects\\hack_agent_arena\\.venv\\Lib\\site-packages\\litellm\\llms\\openai.py\", line 41",
+      "5238afc_1: Traceback (most recent call last):\n  File \"C:\\Users\\moham\\Projects\\hack_agent_arena\\.venv\\Lib\\site-packages\\litellm\\llms\\openai.py\", line 41",
+      "6a5e690_3: Traceback (most recent call last):\n  File \"C:\\Users\\moham\\Projects\\hack_agent_arena\\.venv\\Lib\\site-packages\\litellm\\llms\\openai.py\", line 41"
+    ],
+    "FIELD_KEYERROR": [
+      "4242c97_1: KeyError id",
+      "4441ee9_2: KeyError is_starred",
+      "96bf160_3: KeyError id"
+    ],
+    "CASING": [
+      "1c4bd27_3: StopIteration on password lookup",
+      "8d42650_3: Title-case account_name lookup",
+      "cdaaea5_3: Title-case account_name lookup"
+    ],
+    "TOKEN_MISUSE": [
+      "0de03ad_2: Starring thread 26753 with participants ['deniseburch@gmail.com', 'notifications@amazon.com']\nFailed to star thread 26753: Response status c",
+      "0de03ad_2: Failed to star thread 26753: Response status code is 422:\n{\"message\":\"This email thread is already marked as starred.\"}\nFailed to star threa",
+      "adb1060_2: Execution failed. Traceback:\n  File \"<python-input>\", line 2, in <module>\n    print(apis.phone.show_contact_relationships())\n          ^^^^^"
+    ],
+    "WRONG_API_NAME": [
+      "1c4bd27_3: No API named 'list_orders'",
+      "fa327a6_3: No API named 'list_orders'",
+      "fa327a6_3: No API named 'list_transactions'"
+    ],
+    "PAGINATION_MISS": [
+      "8d42650_3: only first page fetched"
+    ]
+  },
+  "per_task": [
+    {
+      "task_id": "0de03ad_2",
+      "final_status": "completed",
+      "num_steps": 19,
+      "categories": [
+        [
+          "FAKE_RECIPIENT",
+          "{\n \"app_name\": \"gmail\",\n \"api_name\": \"show_inbox_threads\",\n \"path\": \"/email_threads/category/inbox\",\n \"method\": \"GET\",\n \"description\": \"Show or search email thr"
+        ],
+        [
+          "FAKE_RECIPIENT",
+          "{\n \"app_name\": \"gmail\",\n \"api_name\": \"search_users\",\n \"path\": \"/users\",\n \"method\": \"GET\",\n \"description\": \"Search Gmail users by name or email address.\",\n \"para"
+        ],
+        [
+          "VALIDATION_422",
+          "Execution failed. Traceback:\n  File \"<python-input>\", line 14, in <module>\n    process_threads(inbox_threads, coworker_emails, access_token)\n  File \"<python-input>\", line 9, in process_threads\n    api"
+        ],
+        [
+          "VALIDATION_422",
+          "Execution failed. Traceback:\n  File \"<python-input>\", line 15, in <module>\n    process_threads(inbox_threads, coworker_emails, access_token)\n  File \"<python-input>\", line 9, in process_threads\n    api"
+        ],
+        [
+          "VALIDATION_422",
+          "Execution failed. Traceback:\n  File \"<python-input>\", line 15, in <module>\n    process_threads(inbox_threads, coworker_emails, access_token)\n  File \"<python-input>\", line 10, in process_threads\n    ap"
+        ],
+        [
+          "VALIDATION_422",
+          "Execution failed. Traceback:\n  File \"<python-input>\", line 17, in <module>\n    process_threads(inbox_threads, coworker_emails, access_token)\n  File \"<python-input>\", line 11, in process_threads\n    ap"
+        ],
+        [
+          "VALIDATION_422",
+          "Execution failed. Traceback:\n  File \"<python-input>\", line 18, in <module>\n    process_threads(inbox_threads, coworker_emails, access_token)\n  File \"<python-input>\", line 12, in process_threads\n    ap"
+        ],
+        [
+          "VALIDATION_422",
+          "Execution failed. Traceback:\n  File \"<python-input>\", line 21, in <module>\n    process_threads(non_archived_threads, coworker_emails, access_token)\n  File \"<python-input>\", line 12, in process_threads"
+        ],
+        [
+          "VALIDATION_422",
+          "Execution failed. Traceback:\n  File \"<python-input>\", line 21, in <module>\n    process_threads(non_archived_threads, coworker_emails, access_token)\n  File \"<python-input>\", line 12, in process_threads"
+        ],
+        [
+          "VALIDATION_422",
+          "Execution failed. Traceback:\n  File \"<python-input>\", line 21, in <module>\n    process_threads(non_archived_threads, coworker_emails, access_token)\n  File \"<python-input>\", line 12, in process_threads"
+        ],
+        [
+          "VALIDATION_422",
+          "Execution failed. Traceback:\n  File \"<python-input>\", line 21, in <module>\n    process_threads(non_archived_threads, coworker_emails, access_token)\n  File \"<python-input>\", line 12, in process_threads"
+        ],
+        [
+          "TOKEN_MISUSE",
+          "Starring thread 26753 with participants ['deniseburch@gmail.com', 'notifications@amazon.com']\nFailed to star thread 26753: Response status code is 422:\n{\"message\":\"This email thread is already marked "
+        ],
+        [
+          "VALIDATION_422",
+          "Starring thread 26753 with participants ['deniseburch@gmail.com', 'notifications@amazon.com']\nFailed to star thread 26753: Response status code is 422:\n{\"message\":\"This email thread is already marked "
+        ],
+        [
+          "TOKEN_MISUSE",
+          "Failed to star thread 26753: Response status code is 422:\n{\"message\":\"This email thread is already marked as starred.\"}\nFailed to star thread 26655: Response status code is 422:\n{\"message\":\"This email"
+        ],
+        [
+          "VALIDATION_422",
+          "Failed to star thread 26753: Response status code is 422:\n{\"message\":\"This email thread is already marked as starred.\"}\nFailed to star thread 26655: Response status code is 422:\n{\"message\":\"This email"
+        ]
+      ],
+      "instruction_preview": "Star all my gmail threads with email/s from or to my coworkers and unstar the rest. Ignore the archived threads."
+    },
+    {
+      "task_id": "18670a5_3",
+      "final_status": "completed",
+      "num_steps": 4,
+      "categories": [],
+      "instruction_preview": "My meeting schedule is in my SimpleNote. Schedule a reminder email for each meeting this week. It should be sent to all "
+    },
+    {
+      "task_id": "1c4bd27_3",
+      "final_status": "completed",
+      "num_steps": 14,
+      "categories": [
+        [
+          "WRONG_API_NAME",
+          "No API named 'list_orders'"
+        ],
+        [
+          "CARD_VALIDITY",
+          "[\n {\n  \"name\": \"show_account\",\n  \"description\": \"Show your account information. Unlike show_profile, this includes private information.\"\n },\n {\n  \"name\": \"signu"
+        ],
+        [
+          "CASING",
+          "StopIteration on password lookup"
+        ],
+        [
+          "VALIDATION_422",
+          "Execution failed. Traceback:\n  File \"<python-input>\", line 2, in <module>\n    print(apis.api_docs.show_api_descriptions(app_name=\"fedex\"))\n          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^"
+        ],
+        [
+          "VALIDATION_422",
+          "Execution failed. Traceback:\n  File \"<python-input>\", line 8, in <module>\n    apis.amazon.initiate_return(\nException: Response status code is 422:\n{\"message\":\"You ordered 1 quantity of Electrolux Styl"
+        ]
+      ],
+      "instruction_preview": "Initiate returns via FedEx for everything in my last 4 amazon order."
+    },
+    {
+      "task_id": "20c1328_3",
+      "final_status": "completed",
+      "num_steps": 2,
+      "categories": [],
+      "instruction_preview": "Buy the highest-rated gaming console controller on amazon in 70-170 price range (ignoring tax and other fees) for each o"
+    },
+    {
+      "task_id": "23d431c_3",
+      "final_status": "completed",
+      "num_steps": 2,
+      "categories": [],
+      "instruction_preview": "Buy me a watch from amazon within $110 (excluding tax). Only trust sellers I have ordered from in the past."
+    },
+    {
+      "task_id": "258796c_2",
+      "final_status": "llm_error",
+      "num_steps": 1,
+      "categories": [
+        [
+          "LLM_ERROR",
+          "Traceback (most recent call last):\n  File \"C:\\Users\\moham\\Projects\\hack_agent_arena\\.venv\\Lib\\site-packages\\litellm\\llms\\openai.py\", line 417, in completion\n    raise e\n  File \"C:\\Users\\moham\\Projects"
+        ]
+      ],
+      "instruction_preview": "How many hours does the battery of Kobo Clara HD eReader last? Please answer as per its amazon reviews or questions/answ"
+    },
+    {
+      "task_id": "4242c97_1",
+      "final_status": "completed",
+      "num_steps": 15,
+      "categories": [
+        [
+          "CARD_VALIDITY",
+          "[\n {\n  \"name\": \"show_account\",\n  \"description\": \"Show your account information. Unlike show_profile, this includes private information.\"\n },\n {\n  \"name\": \"signu"
+        ],
+        [
+          "FIELD_KEYERROR",
+          "KeyError id"
+        ],
+        [
+          "VALIDATION_422",
+          "Execution failed. Traceback:\n  File \"<python-input>\", line 7, in <module>\n    order_response = apis.amazon.place_order(\n                     ^^^^^^^^^^^^^^^^^^^^^^^^\nException: Response status code is"
+        ],
+        [
+          "CARD_VALIDITY",
+          "Execution failed. Traceback:\n  File \"<python-input>\", line 7, in <module>\n    order_response = apis.amazon.place_order(\n                     ^^^^^^^^^^^^^^^^^^^"
+        ],
+        [
+          "CARD_VALIDITY",
+          "Execution successful."
+        ]
+      ],
+      "instruction_preview": "Make an order for two same-colored Hanes Men's ComfortSoft Short Sleeve T-Shirt in extra-large size on Amazon. My color "
+    },
+    {
+      "task_id": "4441ee9_2",
+      "final_status": "completed",
+      "num_steps": 10,
+      "categories": [
+        [
+          "FIELD_KEYERROR",
+          "KeyError is_starred"
+        ],
+        [
+          "VALIDATION_422",
+          "Execution failed. Traceback:\n  File \"<python-input>\", line 48, in <module>\n    starred_threads = process_threads(access_token)\n                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"<python-input"
+        ],
+        [
+          "VALIDATION_422",
+          "Execution failed. Traceback:\n  File \"<python-input>\", line 48, in <module>\n    starred_threads = process_threads(access_token)\n                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"<python-input"
+        ]
+      ],
+      "instruction_preview": "My manager assigns me tasks at the beginning of every week with a subject starting with \"To Do\". At the end of each week"
+    },
+    {
+      "task_id": "5238afc_1",
+      "final_status": "llm_error",
+      "num_steps": 1,
+      "categories": [
+        [
+          "LLM_ERROR",
+          "Traceback (most recent call last):\n  File \"C:\\Users\\moham\\Projects\\hack_agent_arena\\.venv\\Lib\\site-packages\\litellm\\llms\\openai.py\", line 417, in completion\n    raise e\n  File \"C:\\Users\\moham\\Projects"
+        ]
+      ],
+      "instruction_preview": "Place an order for all weightlifting benches in my amazon cart."
+    },
+    {
+      "task_id": "5e27cd7_2",
+      "final_status": "completed",
+      "num_steps": 2,
+      "categories": [],
+      "instruction_preview": "Delete all my Gmail drafts that have empty subject or body."
+    },
+    {
+      "task_id": "69ba40f_1",
+      "final_status": "completed",
+      "num_steps": 10,
+      "categories": [
+        [
+          "FAKE_RECIPIENT",
+          "{\n \"app_name\": \"gmail\",\n \"api_name\": \"show_outbox_threads\",\n \"path\": \"/email_threads/category/outbox\",\n \"method\": \"GET\",\n \"description\": \"Show or search email t"
+        ]
+      ],
+      "instruction_preview": "I just finished sending out my job applications to many potential employers. Please schedule a reply of \"A gentle remind"
+    },
+    {
+      "task_id": "6a5e690_3",
+      "final_status": "llm_error",
+      "num_steps": 1,
+      "categories": [
+        [
+          "LLM_ERROR",
+          "Traceback (most recent call last):\n  File \"C:\\Users\\moham\\Projects\\hack_agent_arena\\.venv\\Lib\\site-packages\\litellm\\llms\\openai.py\", line 417, in completion\n    raise e\n  File \"C:\\Users\\moham\\Projects"
+        ]
+      ],
+      "instruction_preview": "Send all my future-scheduled emails on Gmail right away."
+    },
+    {
+      "task_id": "8d42650_3",
+      "final_status": "completed",
+      "num_steps": 2,
+      "categories": [
+        [
+          "PAGINATION_MISS",
+          "only first page fetched"
+        ],
+        [
+          "CASING",
+          "Title-case account_name lookup"
+        ]
+      ],
+      "instruction_preview": "I get monthly cable bill via email on the 1st of every month for the previous month's usage. I pay for it but its total "
+    },
+    {
+      "task_id": "96bf160_3",
+      "final_status": "completed",
+      "num_steps": 22,
+      "categories": [
+        [
+          "FIELD_KEYERROR",
+          "KeyError id"
+        ],
+        [
+          "VALIDATION_422",
+          "Execution failed. Traceback:\n  File \"<python-input>\", line 8, in <module>\n    thread_details = apis.gmail.show_thread(access_token=access_token, thread_id=thread_id)\n                     ^^^^^^^^^^^^^"
+        ],
+        [
+          "FAKE_RECIPIENT",
+          "{\n \"app_name\": \"gmail\",\n \"api_name\": \"show_thread\",\n \"path\": \"/email_threads/{email_thread_id}\",\n \"method\": \"GET\",\n \"description\": \"Show detailed information ab"
+        ],
+        [
+          "FIELD_KEYERROR",
+          "KeyError participants"
+        ],
+        [
+          "VALIDATION_422",
+          "Execution failed. Traceback:\n  File \"<python-input>\", line 18, in <module>\n    apis.gmail.forward_email_from_thread(\nException: Response status code is 422:\n{\"message\":\"Validation error. Reason: \\nema"
+        ]
+      ],
+      "instruction_preview": "My roommate sent me \"cable_bill.pdf\" on Gmail sometime ago. Please find it and forward that email to the rest of my room"
+    },
+    {
+      "task_id": "9871968_2",
+      "final_status": "completed",
+      "num_steps": 2,
+      "categories": [
+        [
+          "VALIDATION_422",
+          "Error with card 221: Response status code is 422:\n{\"message\":\"Your payment card doesn't have enough balance to place the order.\"}"
+        ],
+        [
+          "VALIDATION_422",
+          "Error with card 221: Response status code is 422:\n{\"message\":\"The cart is empty, so can't place the order.\"}. Trying the next card.\nError with card 222: Response status code is 422:\n{\"message\":\"The ca"
+        ]
+      ],
+      "instruction_preview": "Buy everything on my amazon wishlist, and have it delivered to my home address."
+    },
+    {
+      "task_id": "98d2608_3",
+      "final_status": "llm_error",
+      "num_steps": 1,
+      "categories": [
+        [
+          "LLM_ERROR",
+          "Traceback (most recent call last):\n  File \"C:\\Users\\moham\\Projects\\hack_agent_arena\\.venv\\Lib\\site-packages\\litellm\\llms\\openai.py\", line 417, in completion\n    raise e\n  File \"C:\\Users\\moham\\Projects"
+        ]
+      ],
+      "instruction_preview": "Email the birth certificate found in my file system to my husband."
+    },
+    {
+      "task_id": "adb1060_2",
+      "final_status": "completed",
+      "num_steps": 16,
+      "categories": [
+        [
+          "TOKEN_MISUSE",
+          "Execution failed. Traceback:\n  File \"<python-input>\", line 2, in <module>\n    print(apis.phone.show_contact_relationships())\n          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nException: Response statu"
+        ],
+        [
+          "CARD_VALIDITY",
+          "Execution failed. Traceback:\n  File \"<python-input>\", line 2, in <module>\n    print(apis.phone.show_contact_relationships())\n          ^^^^^^^^^^^^^^^^^^^^^^^^^"
+        ],
+        [
+          "TOKEN_MISUSE",
+          "Execution failed. Traceback:\n  File \"<python-input>\", line 4, in <module>\n    print(apis.phone.login(username=email, password=phone_password))\n          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^"
+        ],
+        [
+          "FAKE_RECIPIENT",
+          "{\n \"app_name\": \"phone\",\n \"api_name\": \"search_contacts\",\n \"path\": \"/contacts\",\n \"method\": \"GET\",\n \"description\": \"Search your contact book for relatives' informa"
+        ],
+        [
+          "VALIDATION_422",
+          "[\n {\n  \"contact_id\": 1492,\n  \"first_name\": \"Bradley\",\n  \"last_name\": \"Ball\",\n  \"email\": \"bradley_ball@gmail.com\",\n  \"phone_number\": \"9294880327\",\n  \"relationships\": [\n   \"friend\"\n  ],\n  \"birthday\": \"1"
+        ],
+        [
+          "VALIDATION_422",
+          "Execution failed. Traceback:\n  File \"<python-input>\", line 29, in <module>\n    print(apis.gmail.create_draft(\n          ^^^^^^^^^^^^^^^^^^^^^^^^\nException: Response status code is 422:\n{\"message\":\"Val"
+        ],
+        [
+          "VALIDATION_422",
+          "Execution failed. Traceback:\n  File \"<python-input>\", line 8, in <module>\n    print(apis.gmail.create_draft(\n          ^^^^^^^^^^^^^^^^^^^^^^^^\nException: Response status code is 422:\n{\"message\":\"The "
+        ]
+      ],
+      "instruction_preview": "Set up an email to be sent automatically to each of my friends at 00:45 AM on the day of their next birthday. The email "
+    },
+    {
+      "task_id": "b0934aa_3",
+      "final_status": "completed",
+      "num_steps": 21,
+      "categories": [
+        [
+          "CARD_VALIDITY",
+          "[\n {\n  \"name\": \"show_account\",\n  \"description\": \"Show your account information. Unlike show_profile, this includes private information.\"\n },\n {\n  \"name\": \"signu"
+        ],
+        [
+          "VALIDATION_422",
+          "Execution failed. Traceback:\n  File \"<python-input>\", line 6, in <module>\n    apis.amazon.place_order(\nException: Response status code is 422:\n{\"message\":\"The payment card has expired.\"}"
+        ],
+        [
+          "CARD_VALIDITY",
+          "Execution failed. Traceback:\n  File \"<python-input>\", line 6, in <module>\n    apis.amazon.place_order(\nException: Response status code is 422:\n{\"message\":\"The p"
+        ],
+        [
+          "VALIDATION_422",
+          "Execution failed. Traceback:\n  File \"<python-input>\", line 13, in <module>\n    apis.amazon.place_order(\nException: Response status code is 422:\n{\"message\":\"Your payment card doesn't have enough balanc"
+        ],
+        [
+          "CARD_VALIDITY",
+          "Execution failed. Traceback:\n  File \"<python-input>\", line 13, in <module>\n    apis.amazon.place_order(\nException: Response status code is 422:\n{\"message\":\"Your"
+        ],
+        [
+          "CARD_VALIDITY",
+          "{\n \"app_name\": \"amazon\",\n \"api_name\": \"add_payment_card\",\n \"path\": \"/payment_cards\",\n \"method\": \"POST\",\n \"description\": \"Add a new payment card.\",\n \"parameters\""
+        ],
+        [
+          "VALIDATION_422",
+          "Execution failed. Traceback:\n  File \"<python-input>\", line 13, in <module>\n    response = apis.amazon.add_payment_card(\n               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nException: Response status code is "
+        ],
+        [
+          "CARD_VALIDITY",
+          "Execution failed. Traceback:\n  File \"<python-input>\", line 13, in <module>\n    response = apis.amazon.add_payment_card(\n               ^^^^^^^^^^^^^^^^^^^^^^^^^"
+        ],
+        [
+          "VALIDATION_422",
+          "Execution failed. Traceback:\n  File \"<python-input>\", line 13, in <module>\n    response = apis.amazon.add_payment_card(\n               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nException: Response status code is "
+        ],
+        [
+          "CARD_VALIDITY",
+          "Execution failed. Traceback:\n  File \"<python-input>\", line 13, in <module>\n    response = apis.amazon.add_payment_card(\n               ^^^^^^^^^^^^^^^^^^^^^^^^^"
+        ],
+        [
+          "VALIDATION_422",
+          "Execution failed. Traceback:\n  File \"<python-input>\", line 7, in <module>\n    apis.amazon.place_order(\nException: Response status code is 422:\n{\"message\":\"Your payment card doesn't have enough balance"
+        ],
+        [
+          "CARD_VALIDITY",
+          "Execution failed. Traceback:\n  File \"<python-input>\", line 7, in <module>\n    apis.amazon.place_order(\nException: Response status code is 422:\n{\"message\":\"Your "
+        ],
+        [
+          "CARD_VALIDITY",
+          "Unable to complete the purchase due to insufficient balance on available cards and invalid new card details."
+        ]
+      ],
+      "instruction_preview": "Buy me a hedge trimmer on amazon under $60 (excluding tax), over 3.9 rating, and over 5 reviews, and have it delivered t"
+    },
+    {
+      "task_id": "ba46d91_2",
+      "final_status": "completed",
+      "num_steps": 2,
+      "categories": [],
+      "instruction_preview": "How many months of amazon prime subscription do I still have left? Round to the nearest number."
+    },
+    {
+      "task_id": "ba46d91_3",
+      "final_status": "llm_error",
+      "num_steps": 1,
+      "categories": [
+        [
+          "LLM_ERROR",
+          "Traceback (most recent call last):\n  File \"C:\\Users\\moham\\Projects\\hack_agent_arena\\.venv\\Lib\\site-packages\\litellm\\llms\\openai.py\", line 417, in completion\n    raise e\n  File \"C:\\Users\\moham\\Projects"
+        ]
+      ],
+      "instruction_preview": "How many months of spotify premium subscription do I still have left? Round to the nearest number."
+    },
+    {
+      "task_id": "c1091c7_2",
+      "final_status": "completed",
+      "num_steps": 2,
+      "categories": [],
+      "instruction_preview": "I have alarms for all my work meetings. Some of my coworkers have canceled their meeting with me via email. Please disab"
+    },
+    {
+      "task_id": "cdaaea5_3",
+      "final_status": "completed",
+      "num_steps": 11,
+      "categories": [
+        [
+          "CASING",
+          "Title-case account_name lookup"
+        ],
+        [
+          "CASING",
+          "Title-case account_name lookup"
+        ],
+        [
+          "CASING",
+          "Title-case account_name lookup"
+        ],
+        [
+          "CASING",
+          "Title-case account_name lookup"
+        ],
+        [
+          "CASING",
+          "Title-case account_name lookup"
+        ],
+        [
+          "CARD_VALIDITY",
+          "[\n {\n  \"name\": \"show_account\",\n  \"description\": \"Show your account information. Unlike show_profile, this includes private information.\"\n },\n {\n  \"name\": \"signu"
+        ],
+        [
+          "TOKEN_MISUSE",
+          "Execution failed. Traceback:\n  File \"<python-input>\", line 31, in <module>\n    apis.amazon.add_product_to_cart(product_id=highest_rated_product['product_id'], quantity=1, access_token=amazon_access_to"
+        ],
+        [
+          "CARD_VALIDITY",
+          "Execution failed. Traceback:\n  File \"<python-input>\", line 31, in <module>\n    apis.amazon.add_product_to_cart(product_id=highest_rated_product['product_id'], q"
+        ],
+        [
+          "CARD_VALIDITY",
+          "Execution failed. Traceback:\n  File \"<python-input>\", line 26, in <module>\n    highest_rated_product = find_highest_rated_product(item)\n                        "
+        ]
+      ],
+      "instruction_preview": "Place an order for my home address as per my Amazon shopping list in SimpleNote. For each item in it, buy me the highest"
+    },
+    {
+      "task_id": "ce73d68_1",
+      "final_status": "completed",
+      "num_steps": 11,
+      "categories": [
+        [
+          "FAKE_RECIPIENT",
+          "{\n \"app_name\": \"gmail\",\n \"api_name\": \"show_outbox_threads\",\n \"path\": \"/email_threads/category/outbox\",\n \"method\": \"GET\",\n \"description\": \"Show or search email t"
+        ],
+        [
+          "FAKE_RECIPIENT",
+          "{\n \"app_name\": \"gmail\",\n \"api_name\": \"show_thread\",\n \"path\": \"/email_threads/{email_thread_id}\",\n \"method\": \"GET\",\n \"description\": \"Show detailed information ab"
+        ]
+      ],
+      "instruction_preview": "I sent out job application emails to many potential employers over the last week. Reply \"A gentle reminder.\" to everyone"
+    },
+    {
+      "task_id": "dbc0276_3",
+      "final_status": "completed",
+      "num_steps": 4,
+      "categories": [],
+      "instruction_preview": "Send an itemized list of my amazon wish list to my partner via a phone text. The message should be a newline-separated l"
+    },
+    {
+      "task_id": "e70b117_2",
+      "final_status": "completed",
+      "num_steps": 33,
+      "categories": [
+        [
+          "FAKE_RECIPIENT",
+          "{\n \"app_name\": \"gmail\",\n \"api_name\": \"show_inbox_threads\",\n \"path\": \"/email_threads/category/inbox\",\n \"method\": \"GET\",\n \"description\": \"Show or search email thr"
+        ],
+        [
+          "FAKE_RECIPIENT",
+          "Execution successful.\n# Search for the email from the manager containing the schedule.\n# Assuming the manager's email is known, we can filter by the sender's em"
+        ],
+        [
+          "FAKE_RECIPIENT",
+          "{\n \"app_name\": \"gmail\",\n \"api_name\": \"show_thread\",\n \"path\": \"/email_threads/{email_thread_id}\",\n \"method\": \"GET\",\n \"description\": \"Show detailed information ab"
+        ],
+        [
+          "VALIDATION_422",
+          "Execution failed. Traceback:\n  File \"<python-input>\", line 2, in <module>\n    print(apis.api_docs.show_api_doc(app_name='file_system', api_name='read_file'))\n          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^"
+        ],
+        [
+          "VALIDATION_422",
+          "Execution failed. Traceback:\n  File \"<python-input>\", line 7, in <module>\n    template_content = apis.file_system.show_file(\n                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^\nException: Response stat"
+        ],
+        [
+          "VALIDATION_422",
+          "Execution failed. Traceback:\n  File \"<python-input>\", line 31, in <module>\n    apis.gmail.create_draft(\nException: Response status code is 422:\n{\"message\":\"Validation error. Reason: \\nrecipient_email_"
+        ]
+      ],
+      "instruction_preview": "In my company, we invite an external speaker to give a talk every Thursday at 1 PM. My manager has sent me a schedule fo"
+    },
+    {
+      "task_id": "eb5ad85_1",
+      "final_status": "llm_error",
+      "num_steps": 1,
+      "categories": [
+        [
+          "LLM_ERROR",
+          "Traceback (most recent call last):\n  File \"C:\\Users\\moham\\Projects\\hack_agent_arena\\.venv\\Lib\\site-packages\\litellm\\llms\\openai.py\", line 417, in completion\n    raise e\n  File \"C:\\Users\\moham\\Projects"
+        ]
+      ],
+      "instruction_preview": "How much did I spend on amazon in this calendar year?"
+    },
+    {
+      "task_id": "f6be291_1",
+      "final_status": "completed",
+      "num_steps": 5,
+      "categories": [
+        [
+          "FIELD_KEYERROR",
+          "KeyError emails"
+        ]
+      ],
+      "instruction_preview": "We are planning a get-together with our friends next week. Buy stuff according to the checklist my husband sent me over "
+    },
+    {
+      "task_id": "fa327a6_3",
+      "final_status": "completed",
+      "num_steps": 12,
+      "categories": [
+        [
+          "WRONG_API_NAME",
+          "No API named 'list_orders'"
+        ],
+        [
+          "CARD_VALIDITY",
+          "[\n {\n  \"name\": \"show_account\",\n  \"description\": \"Show your account information. Unlike show_profile, this includes private information.\"\n },\n {\n  \"name\": \"signu"
+        ],
+        [
+          "FIELD_KEYERROR",
+          "KeyError total_amount"
+        ],
+        [
+          "WRONG_API_NAME",
+          "No API named 'list_transactions'"
+        ],
+        [
+          "CARD_VALIDITY",
+          "[\n {\n  \"name\": \"show_account\",\n  \"description\": \"Show your account information. Unlike show_profile, this includes private information.\"\n },\n {\n  \"name\": \"signu"
+        ],
+        [
+          "FIELD_KEYERROR",
+          "KeyError from"
+        ]
+      ],
+      "instruction_preview": "My last 4 amazon orders were for my friend, Valerie. They have sent me the money for their total cost on venmo today. Ch"
+    }
+  ]
+}
