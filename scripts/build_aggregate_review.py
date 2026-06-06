@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-OUT = ROOT / "aggregate_run_review.json"
+OUT = ROOT / "aggregate.json"
 PREVIEW = 280
 
 
@@ -39,6 +39,13 @@ def summarize_api_calls(path: Path) -> dict:
             continue
         app = row.get("app_name") or row.get("app") or ""
         api = row.get("api_name") or row.get("api") or ""
+        if not app and row.get("url"):
+            url = str(row["url"]).strip("/")
+            parts = url.split("/")
+            if parts and parts[0] not in ("api_docs",):
+                app = parts[0]
+            if len(parts) >= 2:
+                api = parts[-1]
         if app:
             apps.add(app)
         if app and api:
@@ -46,7 +53,7 @@ def summarize_api_calls(path: Path) -> dict:
     return {
         "count": len(endpoints),
         "apps": sorted(apps),
-        "endpoints": endpoints[-8:],  # last few calls often include complete_task
+        "endpoints": endpoints[-8:],
     }
 
 
@@ -67,6 +74,11 @@ def summarize_trace(trace_path: Path) -> dict:
             "llm_error": bool(s.get("llm_error")),
         })
     last_code = steps[-1].get("code") if steps else None
+    complete_task_calls = [
+        preview(s.get("code") or "", 200)
+        for s in steps
+        if s.get("code") and "complete_task" in str(s.get("code", ""))
+    ]
     return {
         "task_id": trace.get("task_id"),
         "dataset": trace.get("dataset"),
@@ -80,6 +92,7 @@ def summarize_trace(trace_path: Path) -> dict:
         "execution_error_count": len(exec_errors),
         "execution_errors_sample": exec_errors[:3],
         "last_code_preview": preview(last_code or "", 300),
+        "complete_task_calls": complete_task_calls[-2:],
         "step_timeline": timeline,
         "trace_path": str(trace_path.relative_to(ROOT)).replace("\\", "/"),
     }
@@ -136,6 +149,7 @@ def task_record(
                 "execution_error_count",
                 "execution_errors_sample",
                 "last_code_preview",
+                "complete_task_calls",
                 "step_timeline",
                 "trace_path",
             )
@@ -173,6 +187,12 @@ def collect_experiment(experiment: str, trace_dir: Path | None, dataset_for_eval
     eval_passed = sum(1 for t in tasks if t.get("evaluation") and t["evaluation"].get("passed"))
     eval_total = sum(1 for t in tasks if t.get("evaluation") is not None)
 
+    eval_file = ROOT / "experiments" / "outputs" / experiment / "evaluations" / f"{dataset_for_eval}.json"
+    eval_aggregate = None
+    if eval_file.is_file():
+        eval_data = json.loads(eval_file.read_text(encoding="utf-8"))
+        eval_aggregate = eval_data.get("aggregate")
+
     return {
         "experiment": experiment,
         "trace_dir": str(trace_dir.relative_to(ROOT)).replace("\\", "/") if trace_dir else None,
@@ -184,6 +204,7 @@ def collect_experiment(experiment: str, trace_dir: Path | None, dataset_for_eval
             "scored_tasks": eval_total,
             "passed": eval_passed,
             "tgc_percent": round(100 * eval_passed / eval_total, 1) if eval_total else None,
+            "aggregate_metrics": eval_aggregate,
         },
         "tasks": tasks,
     }

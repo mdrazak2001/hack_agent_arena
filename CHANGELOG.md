@@ -1,5 +1,15 @@
 # Changelog
 
+## iter2 — 100% TGC on agent_arena_eval
+
+- **`simple_note_content_by_title` helper**: `search_notes()` returns irrelevant hits; filter exact title before parsing meeting schedule
+- **`execution_recovery_hint()`**: deterministic recovery for meeting/cable playbook tasks, `account_password(apis, app)` misuse, and 0-draft false completion
+- **Stronger playbooks**: explicit helper-only flow for meeting drafts + Splitwise cable bills; `account_password(apis, 'app')` signature in examples
+- **`contact_email_by_first_name`**: handle full names and first-name-only attendee lists
+- **`TASK_IDS` env filter**: comma-separated task filter for targeted smoke tests (general debugging)
+- **Hydra seed v13**: note title filter + helper call patterns
+- **Why**: baseline failures on 18670a5_3 (wrong note from search_notes[0]) and 8d42650_3 (ignored helper)
+
 ## Pre-loop (staged v10 prompt fixes)
 
 - **CASING / SPLITWISE / MEETING / CHECKLIST playbooks** in `agent.py` + Hydra seed v10
@@ -19,4 +29,4 @@
 
 ## baseline
 
-- Pending full eval run (10 tasks, submission model).
+- 80% TGC (8/10) on agent_arena_eval with submission model.

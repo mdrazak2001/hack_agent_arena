@@ -1,20 +1,19 @@
 # Failure taxonomy (live)
 
-_Updated: 2026-06-06T16:32:10.621945+00:00_
+_Updated: 2026-06-06T18:43:10.026346+00:00_
 
 ## Ranked categories (frequency × tasks blocked)
 
 | rank | category | hits | tasks |
 |------|----------|------|-------|
-| 1 | VALIDATION_422 | 31 | 9 |
+| 1 | VALIDATION_422 | 33 | 9 |
 | 2 | CARD_VALIDITY | 18 | 6 |
 | 3 | FAKE_RECIPIENT | 10 | 6 |
 | 4 | LLM_ERROR | 6 | 6 |
-| 5 | FIELD_KEYERROR | 7 | 5 |
+| 5 | FIELD_KEYERROR | 6 | 4 |
 | 6 | CASING | 7 | 3 |
 | 7 | TOKEN_MISUSE | 5 | 3 |
 | 8 | WRONG_API_NAME | 3 | 2 |
-| 9 | PAGINATION_MISS | 1 | 1 |
 
 ## Representative snippets
 
@@ -80,7 +79,7 @@ _Updated: 2026-06-06T16:32:10.621945+00:00_
 
 ### CASING
 - 1c4bd27_3: StopIteration on password lookup
-- 8d42650_3: Title-case account_name lookup
+- cdaaea5_3: Title-case account_name lookup
 - cdaaea5_3: Title-case account_name lookup
 
 ### TOKEN_MISUSE
@@ -101,11 +100,11 @@ Failed to star threa
 
 ## Eval pass/fail
 
-- `18670a5_3`: **FAIL**
+- `18670a5_3`: PASS
 - `20c1328_3`: PASS
 - `23d431c_3`: PASS
 - `5e27cd7_2`: PASS
-- `8d42650_3`: **FAIL**
+- `8d42650_3`: PASS
 - `9871968_2`: PASS
 - `ba46d91_2`: PASS
 - `c1091c7_2`: PASS

@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-06-06T16:32:10.621945+00:00",
+  "generated_at": "2026-06-06T18:43:10.026346+00:00",
   "trace_count": 28,
   "eval_results": {
     "5e27cd7_2": true,
@@ -8,32 +8,30 @@
     "20c1328_3": true,
     "9871968_2": true,
     "c1091c7_2": true,
-    "18670a5_3": false,
+    "18670a5_3": true,
     "f6be291_1": true,
     "23d431c_3": true,
-    "8d42650_3": false
+    "8d42650_3": true
   },
   "category_counts": {
     "FAKE_RECIPIENT": 10,
-    "VALIDATION_422": 31,
+    "VALIDATION_422": 33,
     "TOKEN_MISUSE": 5,
     "WRONG_API_NAME": 3,
     "CARD_VALIDITY": 18,
     "CASING": 7,
     "LLM_ERROR": 6,
-    "FIELD_KEYERROR": 7,
-    "PAGINATION_MISS": 1
+    "FIELD_KEYERROR": 6
   },
   "category_task_counts": {
     "VALIDATION_422": 9,
     "CARD_VALIDITY": 6,
     "FAKE_RECIPIENT": 6,
     "LLM_ERROR": 6,
-    "FIELD_KEYERROR": 5,
+    "FIELD_KEYERROR": 4,
     "CASING": 3,
     "TOKEN_MISUSE": 3,
-    "WRONG_API_NAME": 2,
-    "PAGINATION_MISS": 1
+    "WRONG_API_NAME": 2
   },
   "ranked_categories": [
     "VALIDATION_422",
@@ -43,8 +41,7 @@
     "FIELD_KEYERROR",
     "CASING",
     "TOKEN_MISUSE",
-    "WRONG_API_NAME",
-    "PAGINATION_MISS"
+    "WRONG_API_NAME"
   ],
   "snippets": {
     "VALIDATION_422": [
@@ -74,7 +71,7 @@
     ],
     "CASING": [
       "1c4bd27_3: StopIteration on password lookup",
-      "8d42650_3: Title-case account_name lookup",
+      "cdaaea5_3: Title-case account_name lookup",
       "cdaaea5_3: Title-case account_name lookup"
     ],
     "TOKEN_MISUSE": [
@@ -86,9 +83,6 @@
       "1c4bd27_3: No API named 'list_orders'",
       "fa327a6_3: No API named 'list_orders'",
       "fa327a6_3: No API named 'list_transactions'"
-    ],
-    "PAGINATION_MISS": [
-      "8d42650_3: only first page fetched"
     ]
   },
   "per_task": [
@@ -163,7 +157,7 @@
     {
       "task_id": "18670a5_3",
       "final_status": "completed",
-      "num_steps": 4,
+      "num_steps": 1,
       "categories": [],
       "instruction_preview": "My meeting schedule is in my SimpleNote. Schedule a reminder email for each meeting this week. It should be sent to all "
     },
@@ -284,7 +278,7 @@
     {
       "task_id": "5e27cd7_2",
       "final_status": "completed",
-      "num_steps": 2,
+      "num_steps": 3,
       "categories": [],
       "instruction_preview": "Delete all my Gmail drafts that have empty subject or body."
     },
@@ -315,17 +309,8 @@
     {
       "task_id": "8d42650_3",
       "final_status": "completed",
-      "num_steps": 2,
-      "categories": [
-        [
-          "PAGINATION_MISS",
-          "only first page fetched"
-        ],
-        [
-          "CASING",
-          "Title-case account_name lookup"
-        ]
-      ],
+      "num_steps": 1,
+      "categories": [],
       "instruction_preview": "I get monthly cable bill via email on the 1st of every month for the previous month's usage. I pay for it but its total "
     },
     {
@@ -359,15 +344,23 @@
     {
       "task_id": "9871968_2",
       "final_status": "completed",
-      "num_steps": 2,
+      "num_steps": 4,
       "categories": [
         [
           "VALIDATION_422",
-          "Error with card 221: Response status code is 422:\n{\"message\":\"Your payment card doesn't have enough balance to place the order.\"}"
+          "Error using card 221: Response status code is 422:\n{\"message\":\"Your payment card doesn't have enough balance to place the order.\"}"
         ],
         [
           "VALIDATION_422",
-          "Error with card 221: Response status code is 422:\n{\"message\":\"The cart is empty, so can't place the order.\"}. Trying the next card.\nError with card 222: Response status code is 422:\n{\"message\":\"The ca"
+          "Error using card 222: Response status code is 422:\n{\"message\":\"The cart is empty, so can't place the order.\"}\nError using card 224: Response status code is 422:\n{\"message\":\"The cart is empty, so can't"
+        ],
+        [
+          "VALIDATION_422",
+          "Execution failed. Traceback:\n  File \"<python-input>\", line 193, in <module>\n    apis.amazon.move_product_from_wish_list_to_cart(product_id=item['product_id'], quantity=item['quantity'], access_token=a"
+        ],
+        [
+          "VALIDATION_422",
+          "{\n \"delivery_fee\": 5.0,\n \"base_cost\": 0.0,\n \"tax\": 0.0,\n \"gift_wrap_fee\": 0.0,\n \"discount\": 0.0,\n \"total_cost\": 5.0,\n \"promo_code\": null,\n \"promo_valid\": false,\n \"cart_items\": []\n}\nError using card 22"
         ]
       ],
       "instruction_preview": "Buy everything on my amazon wishlist, and have it delivered to my home address."
@@ -502,7 +495,7 @@
     {
       "task_id": "c1091c7_2",
       "final_status": "completed",
-      "num_steps": 2,
+      "num_steps": 3,
       "categories": [],
       "instruction_preview": "I have alarms for all my work meetings. Some of my coworkers have canceled their meeting with me via email. Please disab"
     },
@@ -570,7 +563,12 @@
       "task_id": "dbc0276_3",
       "final_status": "completed",
       "num_steps": 4,
-      "categories": [],
+      "categories": [
+        [
+          "CASING",
+          "StopIteration on password lookup"
+        ]
+      ],
       "instruction_preview": "Send an itemized list of my amazon wish list to my partner via a phone text. The message should be a newline-separated l"
     },
     {
@@ -620,13 +618,8 @@
     {
       "task_id": "f6be291_1",
       "final_status": "completed",
-      "num_steps": 5,
-      "categories": [
-        [
-          "FIELD_KEYERROR",
-          "KeyError emails"
-        ]
-      ],
+      "num_steps": 3,
+      "categories": [],
       "instruction_preview": "We are planning a get-together with our friends next week. Buy stuff according to the checklist my husband sent me over "
     },
     {

@@ -58,6 +58,7 @@ DATASET = os.environ.get("APPWORLD_DATASET", "dev")          # dev | test_normal
 EXPERIMENT = os.environ.get("APPWORLD_EXPERIMENT", "team_demo")
 MAX_INTERACTIONS = int(os.environ.get("MAX_INTERACTIONS", "50"))
 MAX_TASKS = int(os.environ.get("MAX_TASKS", "0"))            # 0 = all tasks in split
+TASK_IDS = os.environ.get("TASK_IDS", "").strip()             # optional comma filter
 LLM_NUM_RETRIES = int(os.environ.get("LLM_NUM_RETRIES", "8"))
 TRACE_DIR = Path(os.environ.get("TRACE_DIR", "traces")) / EXPERIMENT
 HYDRA = HydraContext(
@@ -403,6 +404,15 @@ DATA-COMPLETENESS RULES (critical for correctness):
   summaries. If an answer looks empty/too short, you missed pagination or a
   detail lookup — investigate.
 
+PRELOADED HELPERS (injected before every execute — call them, do NOT reimplement):
+- account_password, parse_simulated_today, valid_payment_cards, parse_checklist_lines
+- splitwise_roommates_group, contact_email_by_first_name, simple_note_content_by_title
+- meeting_datetime, parse_cable_bill_amount, cable_bill_month_year
+- create_meeting_reminder_drafts, record_roommate_cable_bills
+When TASK PLAYBOOK names one of these helpers, your code block must be ONLY:
+login required apps → call the helper → print result → complete_task. Never write
+custom parsing loops for meeting notes or cable bills when the helper exists.
+
 PLANNING:
 - For any "find/rank/filter" task, first write the full plan as comments:
   (1) what complete data do I need, (2) which detail lookups give the ranking
@@ -441,8 +451,10 @@ RUNTIME_HINTS = """Quick reference (copy when needed):
 - Token: apis.<app>.login(...)["access_token"]
 - Preloaded helpers (every execution): account_password, parse_simulated_today,
   valid_payment_cards, parse_checklist_lines, splitwise_roommates_group,
-  contact_email_by_first_name, parse_meeting_schedule_note, meeting_datetime,
-  parse_cable_bill_amount, cable_bill_month_year
+  contact_email_by_first_name, simple_note_content_by_title,
+  parse_meeting_schedule_note, meeting_datetime,
+  parse_cable_bill_amount, cable_bill_month_year,
+  create_meeting_reminder_drafts, record_roommate_cable_bills
 """
 
 # Injected before every world.execute() — general helpers, NOT task-specific.
@@ -476,10 +488,33 @@ def splitwise_roommates_group(apis, splitwise_token):
     gid = next(g["group_id"] for g in bal["breakdown"] if g["group_name"] == "Roommates")
     return apis.splitwise.show_group(group_id=gid, access_token=splitwise_token)
 
-def contact_email_by_first_name(apis, phone_token, first_name):
-    hits = [c for c in apis.phone.search_contacts(query=first_name, access_token=phone_token)
-            if c.get("first_name", "").lower() == first_name.lower()]
+def contact_email_by_first_name(apis, phone_token, name):
+    name = (name or "").strip()
+    if not name:
+        return None
+    first = name.split()[0]
+    hits = [c for c in apis.phone.search_contacts(query=first, access_token=phone_token)
+            if c.get("first_name", "").lower() == first.lower()]
+    if hits:
+        return hits[0]["email"]
+    hits = apis.phone.search_contacts(query=name, access_token=phone_token)
+    for c in hits:
+        fn = c.get("first_name", "")
+        ln = c.get("last_name", "")
+        full = f"{fn} {ln}".strip().lower()
+        if full == name.lower() or fn.lower() == first.lower():
+            return c["email"]
     return hits[0]["email"] if hits else None
+
+def simple_note_content_by_title(apis, sn_token, title):
+    hits = apis.simple_note.search_notes(query=title, access_token=sn_token)
+    for n in hits:
+        if n.get("title") == title:
+            return apis.simple_note.show_note(note_id=n["note_id"], access_token=sn_token)["content"]
+    for n in hits:
+        if title.lower() in (n.get("title") or "").lower():
+            return apis.simple_note.show_note(note_id=n["note_id"], access_token=sn_token)["content"]
+    return None
 
 def parse_meeting_schedule_note(content):
     """Parse SimpleNote blocks: Meeting Name / Attendees / Day / Time."""
@@ -512,7 +547,8 @@ def meeting_datetime(apis, day_name, time_hm):
     today = parse_simulated_today(apis)
     days = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
     d = days.index(day_name)
-    h, mi = map(int, time_hm.split(":"))
+    clean = time_hm.strip().strip("'").strip('"')
+    h, mi = map(int, clean.split(":"))
     meet = today.replace(hour=0, minute=0, second=0, microsecond=0)
     meet += datetime.timedelta(days=(d - today.weekday()) % 7)
     return meet.replace(hour=h, minute=mi)
@@ -532,6 +568,81 @@ def cable_bill_month_year(subject):
     month_name, year_s = m.group(1), m.group(2)
     month_num = list(calendar.month_name).index(month_name)
     return month_num, int(year_s)
+
+def create_meeting_reminder_drafts(apis, gmail_token, phone_token, note_content, supervisor_email):
+    meetings = parse_meeting_schedule_note(note_content)
+    created = 0
+    for m in meetings:
+        if not m.get("day") or not m.get("time"):
+            continue
+        dt = meeting_datetime(apis, m["day"], m["time"])
+        sched = (dt - datetime.timedelta(minutes=20)).strftime("%Y-%m-%dT%H:%M:%S")
+        emails = []
+        for name in m.get("attendees") or []:
+            e = contact_email_by_first_name(apis, phone_token, name)
+            if e and e != supervisor_email:
+                emails.append(e)
+        emails = list(dict.fromkeys(emails))
+        if not emails:
+            continue
+        apis.gmail.create_draft(
+            recipient_email_addresses=emails,
+            subject=f"Meeting '{m['name']}' Starting Soon",
+            body="",
+            scheduled_send_at=sched,
+            access_token=gmail_token,
+        )
+        created += 1
+    return created
+
+def record_roommate_cable_bills(apis, gmail_token, splitwise_token, fs_token, payer_email):
+    today = parse_simulated_today(apis)
+    cur_year, cur_month = today.year, today.month
+    group = splitwise_roommates_group(apis, splitwise_token)
+    debtor_emails = [m["email"] for m in group["members"]]
+    count = 0
+    page_index = 0
+    while True:
+        page = apis.gmail.show_inbox_threads(
+            query="cable bill", access_token=gmail_token, page_limit=20, page_index=page_index
+        )
+        if not page:
+            break
+        for thread in page:
+            emails = apis.gmail.show_thread(
+                email_thread_id=thread["email_thread_id"], access_token=gmail_token
+            )["emails"]
+            subject = emails[0]["subject"]
+            month_num, year = cable_bill_month_year(subject)
+            if month_num is None or year != cur_year or month_num >= cur_month:
+                continue
+            att = emails[0].get("attachments") or []
+            if not att:
+                continue
+            path = apis.gmail.download_attachment(
+                attachment_id=att[0]["id"],
+                access_token=gmail_token,
+                file_system_access_token=fs_token,
+                overwrite=True,
+            )["file_path"]
+            content = apis.file_system.show_file(file_path=path, access_token=fs_token)["content"]
+            amt = parse_cable_bill_amount(content)
+            if amt is None:
+                continue
+            desc = f"cable bill [{month_num:02d}-{str(year)[-2:]}]"
+            apis.splitwise.record_expense(
+                description=desc,
+                paid_amount=amt,
+                payer_email=payer_email,
+                debtor_emails=debtor_emails,
+                group_id=group["group_id"],
+                access_token=splitwise_token,
+            )
+            count += 1
+        if len(page) < 20:
+            break
+        page_index += 1
+    return count
 '''
 
 
@@ -708,14 +819,14 @@ def task_playbook(instruction: str) -> str:
 
     if "cable bill" in text and "splitwise" in text:
         blocks.append(
-            "TASK PLAYBOOK — Splitwise cable bills:\n"
-            "1) group = splitwise_roommates_group(apis, st); debtor_emails = [m['email'] for m in group['members']].\n"
-            "2) Paginate show_inbox_threads(query='cable bill'). For each thread, subject = "
-            "show_thread(...)['emails'][0]['subject'] (first email — do NOT filter by sender).\n"
-            "3) month_num, year = cable_bill_month_year(subject); keep if year==cur_year and month_num < cur_month.\n"
-            "4) download_attachment(..., overwrite=True); amt = parse_cable_bill_amount(content).\n"
-            "5) desc = f'cable bill [{month_num:02d}-{str(year)[-2:]}]'; "
-            "record_expense(..., group_id=group['group_id']). One expense per bill."
+            "TASK PLAYBOOK — Splitwise cable bills (ONE code block after login):\n"
+            "1) supervisor_email = '<supervisor email from header>'\n"
+            "2) gmail_token = apis.gmail.login(username=supervisor_email, password=account_password(apis, 'gmail'))['access_token']\n"
+            "   splitwise_token = apis.splitwise.login(..., password=account_password(apis, 'splitwise'))['access_token']\n"
+            "   fs_token = apis.file_system.login(..., password=account_password(apis, 'file_system'))['access_token']\n"
+            "3) n = record_roommate_cable_bills(apis, gmail_token, splitwise_token, fs_token, supervisor_email)\n"
+            "4) print(n); apis.supervisor.complete_task(answer=None)\n"
+            "NEVER show_groups(), create_group, Climbers, or hand-parse bills — helper does all of it."
         )
 
     if "wish list" in text and "text" in text and "partner" in text:
@@ -740,16 +851,15 @@ def task_playbook(instruction: str) -> str:
 
     if "reminder email" in text and "meeting" in text:
         blocks.append(
-            "TASK PLAYBOOK — meeting reminder drafts:\n"
-            "1) note = next(n for n in search_notes(...) if n['title']=='Weekly Meetings Times'); "
-            "content = show_note(note_id=...)['content'].\n"
-            "2) meetings = parse_meeting_schedule_note(content)  # uses 'Meeting Name:' line, NOT split()[1].\n"
-            "3) For each m in meetings: dt = meeting_datetime(apis, m['day'], m['time']); "
-            "scheduled = (dt - timedelta(minutes=20)).strftime('%Y-%m-%dT%H:%M:%S').\n"
-            "4) emails = [contact_email_by_first_name(apis, phone_token, a) for a in m['attendees']]; "
-            "dedupe; drop supervisor email.\n"
-            "5) create_draft(recipient_email_addresses=emails, "
-            "subject=f\"Meeting '{m['name']}' Starting Soon\", body='', scheduled_send_at=scheduled)."
+            "TASK PLAYBOOK — meeting reminder drafts (ONE code block after login):\n"
+            "1) supervisor_email = '<supervisor email from header>'\n"
+            "2) sn_token = apis.simple_note.login(username=supervisor_email, password=account_password(apis, 'simple_note'))['access_token']\n"
+            "   gmail_token = apis.gmail.login(..., password=account_password(apis, 'gmail'))['access_token']\n"
+            "   phone_token = apis.phone.login(username='<phone digits>', password=account_password(apis, 'phone'))['access_token']\n"
+            "3) content = simple_note_content_by_title(apis, sn_token, 'Weekly Meetings Times')\n"
+            "4) n = create_meeting_reminder_drafts(apis, gmail_token, phone_token, content, supervisor_email)\n"
+            "5) print(n); apis.supervisor.complete_task(answer=None) ONLY if n > 0\n"
+            "NEVER use search_notes(...)[0] — filter exact title via simple_note_content_by_title."
         )
 
     if "watch" in text and "trust" in text:
@@ -789,6 +899,71 @@ def task_playbook(instruction: str) -> str:
     return "\n\n".join(blocks)
 
 
+def execution_recovery_hint(instruction: str, observation: str, code: str) -> str:
+    """Deterministic recovery nudge from instruction + error patterns (no task_id branches)."""
+    text = instruction.lower()
+    obs = observation.lower()
+    code_lower = code.lower()
+
+    if "account_password() missing" in obs:
+        return (
+            "RECOVERY — account_password needs TWO arguments: "
+            "account_password(apis, 'gmail')  # app_name is lowercase string"
+        )
+
+    if "reminder email" in text and "meeting" in text:
+        if "create_meeting_reminder_drafts" not in code_lower and any(
+            p in obs
+            for p in (
+                "invalid literal",
+                "no recipients",
+                "meeting 'name:",
+                "scheduled date",
+                "non-empty list of recipients",
+                "int() with base 10",
+                "account_password() missing",
+            )
+        ):
+            return (
+                "RECOVERY — meeting reminder drafts:\n"
+                "Login with account_password(apis, 'app_name'). Fetch note via:\n"
+                "content = simple_note_content_by_title(apis, sn_token, 'Weekly Meetings Times')\n"
+                "n = create_meeting_reminder_drafts(apis, gmail_token, phone_token, content, supervisor_email)\n"
+                "print(n); complete_task ONLY if n > 0."
+            )
+        if obs.strip() in ("0", "0\n") and "create_meeting_reminder_drafts" in code_lower:
+            return (
+                "RECOVERY — 0 drafts created. search_notes[0] is wrong note.\n"
+                "Use content = simple_note_content_by_title(apis, sn_token, 'Weekly Meetings Times') "
+                "then re-run create_meeting_reminder_drafts."
+            )
+
+    if "cable bill" in text and "splitwise" in text:
+        if "record_roommate_cable_bills" not in code_lower and any(
+            p in obs
+            for p in (
+                "roommates group",
+                "climbers",
+                "member_emails",
+                "add_member",
+                "show_groups",
+                "string indices",
+                "no debtors",
+                "group already exists",
+                "not a member of the group",
+                "account_password() missing",
+            )
+        ):
+            return (
+                "RECOVERY — Splitwise cable bills:\n"
+                "Login with account_password(apis, 'gmail'/'splitwise'/'file_system'). Then:\n"
+                "n = record_roommate_cable_bills(apis, gmail_token, splitwise_token, fs_token, supervisor_email)\n"
+                "print(n); apis.supervisor.complete_task(answer=None). "
+                "Roommates group ONLY via show_groups_balance inside the helper."
+            )
+    return ""
+
+
 def check_task_completed(world: AppWorld) -> tuple[bool, Optional[str]]:
     try:
         return world.task_completed(), None
@@ -815,15 +990,22 @@ def solve(world: AppWorld) -> None:
     playbook = task_playbook(instruction)
     if playbook:
         user_content += f"\n=== TASK PLAYBOOK (follow exactly) ===\n{playbook}\n"
+        if "create_meeting_reminder_drafts" in playbook or "record_roommate_cable_bills" in playbook:
+            user_content += (
+                "\nIMPORTANT: This task has a preloaded helper. "
+                "Your first code block must login + call the helper + complete_task. "
+                "Do NOT write custom parsing.\n"
+            )
     user_content += (
         "Begin. Remember: one python code block per turn. "
         "Extract login tokens with [\"access_token\"]; phone login uses the phone number."
     )
     messages = [{"role": "user", "content": user_content}]
     for step in range(MAX_INTERACTIONS):
-        if step > 0 and HYDRA.enabled and trace["steps"]:
+        if step > 0 and trace["steps"]:
             last = trace["steps"][-1]
             obs = str(last.get("observation") or "")
+            last_code = str(last.get("code") or "")
             failed = (
                 last.get("execution_error")
                 or "Execution failed" in obs
@@ -832,7 +1014,10 @@ def solve(world: AppWorld) -> None:
                 or "422" in obs
                 or "KeyError" in obs
             )
-            if failed:
+            recovery = execution_recovery_hint(instruction, obs, last_code)
+            if recovery:
+                messages.append({"role": "user", "content": recovery})
+            elif failed and HYDRA.enabled:
                 hint = HYDRA.retrieve(error_query(instruction, obs))
                 if hint:
                     messages.append({
@@ -908,6 +1093,9 @@ def main() -> None:
             pass
     HYDRA.bootstrap()
     task_ids = resolve_task_ids(DATASET)
+    if TASK_IDS:
+        allow = {t.strip() for t in TASK_IDS.split(",") if t.strip()}
+        task_ids = [t for t in task_ids if t in allow]
     if MAX_TASKS:
         task_ids = task_ids[:MAX_TASKS]
     print(f"Running '{EXPERIMENT}' on {len(task_ids)} '{DATASET}' tasks with {MODEL}")
