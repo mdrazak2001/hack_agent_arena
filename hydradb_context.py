@@ -34,9 +34,37 @@ ADDRESSES: amazon.show_addresses has name "Home"/"Work" and address_id. Use name
 NEVER address_type type label or lowercase home. supervisor.show_addresses has NO address_id.
 
 PAYMENT CARDS: show_payment_cards fields payment_card_id expiry_year expiry_month. No is_active field.
-Use apis.phone.get_current_date_and_time for simulated 2023 date (NOT datetime.now()). Valid if
-expiry_year > cur_year OR (expiry_year==cur_year AND expiry_month>=cur_month). On expired/balance try next card.
+get_current_date_and_time returns {"date":"Thursday, May 18, 2023","time":"..."} — NO year/month keys.
+Parse: today=datetime.datetime.strptime(now["date"], "%A, %B %d, %Y"); cur_year,cur_month=today.year,today.month
+Valid if expiry_year > cur_year OR (expiry_year==cur_year AND expiry_month>=cur_month). On expired/balance try next card.
 Never add_payment_card with fake numbers. Never stub actions with print placeholders.
+
+PRIME SUBSCRIPTIONS: show_prime_subscriptions fields prime_subscription_id start_date end_date
+payment_card_digits paid_amount. NO subscription_type NO expiration_date.
+end_date format "2024-03-18T23:59:59". Months left: parse end_date with "%Y-%m-%dT%H:%M:%S", subtract today, round(days/30).
+
+AMAZON CART: show_cart returns DICT with "cart_items" list — NOT a plain list. Use cart["cart_items"].
+clear_cart() to empty. add_product_to_cart(product_id=..., quantity=N, ...). delete_product_from_cart NOT remove_product_from_cart.
+search_products includes inventory_quantity. "For each roommate" with stock=1: loop clear_cart add qty=1 place_order per person.
+
+GMAIL DRAFTS: delete where subject=="" OR body=="". Re-fetch show_drafts() before each delete pass.
+409/draft does not exist = success (idempotent). Paginate page_limit=20.
+
+GMAIL ATTACHMENTS: email attachments use {"id", "file_name"} — read id as attachment_id param.
+download_attachment(attachment_id=att["id"], access_token=gmail_token, file_system_access_token=fs_token).
+Then show_file on returned file_path. Find emails via show_inbox_threads + show_thread.
+
+PHONE ALARMS: fields alarm_id time label enabled repeat_days — NO description. Disable via update_alarm.
+
+AMAZON SELLERS: orders have NO seller field. show_order -> order_items -> show_product(product_id) -> seller_id.
+Trusted sellers = seller_ids from past orders. search_products results also have seller_id not seller.
+
+SPLITWISE: apis.splitwise.record_expense(description, paid_amount, payer_email, debtor_emails, access_token, group_id=...).
+WRONG: create_expense add_expense create_transaction. show_groups for group_id.
+API docs: apis.api_docs.show_api_descriptions(app_name='splitwise') — never apis.splitwise.show_api_descriptions.
+
+FILE PATHS: use exact path from download_attachment file_path. Case-sensitive /home/carl/downloads.
+Never concatenate paths (no double slashes). show_directory returns full paths.
 
 PLACE_ORDER: requires access_token payment_card_id address_id. Orders ENTIRE cart — show_cart first,
 remove unwanted items. Wishlist order: move_product_from_wish_list_to_cart then place_order.
@@ -49,6 +77,13 @@ GMAIL: email_thread_id starred archived. show_thread for details. Plain lists no
 
 AMAZON PRODUCTS: product_id num_product_reviews (not review_count) rating price name product_type.
 """
+
+# Shared hackathon key from organizers — used when HYDRA_DB_API_KEY is not in .env.
+DEFAULT_HYDRA_DB_API_KEY = (
+    "sk_live_i9l10ZRyeYB4.AnhcOUWlUpwYkeot6K5z0v6BEocVmpVpyg9nKmPJ01U"
+)
+# Matches APPWORLD_EXPERIMENT / experiments/outputs/team_prod for this submission.
+DEFAULT_HYDRA_TENANT_ID = "team_prod"
 
 
 class HydraContext:
@@ -64,9 +99,17 @@ class HydraContext:
         seed_knowledge: bool = True,
         cache_dir: Path = Path("traces"),
     ) -> None:
-        self.api_key = api_key or os.environ.get("HYDRA_DB_API_KEY") or os.environ.get("HYDRA_API_KEY")
-        self.tenant_id = tenant_id or os.environ.get("HYDRA_TENANT_ID") or os.environ.get(
-            "APPWORLD_EXPERIMENT", "hack_agent_arena"
+        self.api_key = (
+            api_key
+            or os.environ.get("HYDRA_DB_API_KEY")
+            or os.environ.get("HYDRA_API_KEY")
+            or DEFAULT_HYDRA_DB_API_KEY
+        )
+        self.tenant_id = (
+            tenant_id
+            or os.environ.get("HYDRA_TENANT_ID")
+            or os.environ.get("APPWORLD_EXPERIMENT")
+            or DEFAULT_HYDRA_TENANT_ID
         )
         self.max_results = int(os.environ.get("HYDRA_MAX_RESULTS", str(max_results)))
         self.graph_context = os.environ.get("HYDRA_GRAPH_CONTEXT", "1") not in ("0", "false", "False")
@@ -162,7 +205,7 @@ class HydraContext:
 
     def _seed_marker(self) -> Path:
         safe = "".join(c if c.isalnum() or c in "._-" else "_" for c in self.tenant_id)
-        return self.cache_dir / f".hydra_seeded_{safe}"
+        return self.cache_dir / f".hydra_seeded_v5_{safe}"
 
     def _seed_playbook_if_needed(self) -> None:
         assert self.client is not None

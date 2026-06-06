@@ -59,7 +59,10 @@ MAX_INTERACTIONS = int(os.environ.get("MAX_INTERACTIONS", "50"))
 MAX_TASKS = int(os.environ.get("MAX_TASKS", "0"))            # 0 = all tasks in split
 LLM_NUM_RETRIES = int(os.environ.get("LLM_NUM_RETRIES", "8"))
 TRACE_DIR = Path(os.environ.get("TRACE_DIR", "traces")) / EXPERIMENT
-HYDRA = HydraContext(cache_dir=TRACE_DIR.parent if TRACE_DIR.name else Path("traces"))
+HYDRA = HydraContext(
+    cache_dir=TRACE_DIR.parent if TRACE_DIR.name else Path("traces"),
+    tenant_id=EXPERIMENT,
+)
 
 APPWORLD_KWARGS = {}
 if not hasattr(signal, "SIGALRM"):
@@ -99,35 +102,86 @@ scheduled_send_at="YYYY-MM-DDTHH:MM:SS", access_token=...).
 
 PHONE — there is NO disable_alarm. Use show_alarms, then update_alarm(
 alarm_id=..., enabled=False, access_token=...) to disable, or delete_alarm.
+Alarm fields: alarm_id, time, repeat_days, label, enabled — NO "description".
+Match alarms by label or time, not description.
 Text: send_text_message(phone_number=..., message=..., access_token=...).
 Current time: get_current_date_and_time().
 
 SIMPLE_NOTE — there is NO show_notes. Use search_notes (list) then
 show_note(note_id=...) for content.
 
+SPLITWISE — there is NO create_expense, add_expense, or create_transaction
+(venmo has create_transaction; splitwise does NOT). The ONLY way to add a bill is
+record_expense(description=..., paid_amount=..., payer_email=..., debtor_emails=[...],
+access_token=..., group_id=...). Get group_id from show_groups(access_token=...).
+Get roommate emails from phone.search_contacts(relationship="roommate").
+
 AMAZON — removing a cart item is delete_product_from_cart(product_id=...,
 access_token=...) (NOT remove_product_from_cart); clear_cart() empties it.
 Also: show_wish_list show_cart add_product_to_cart move_product_from_wish_list_to_cart
-place_order show_payment_cards show_addresses show_prime_subscriptions show_orders.
+place_order show_payment_cards show_addresses show_prime_subscriptions show_orders
+show_order show_product.
 Wrong: show_wishlist add_to_cart remove_product_from_cart show_payment_methods.
 
 === PAYMENT CARDS (critical) ===
 - NEVER call add_payment_card with made-up numbers. Use the user's EXISTING
   cards from show_payment_cards(access_token=...).
 - Fields: payment_card_id, expiry_year, expiry_month. No is_active field.
-- A card is VALID if it is not expired relative to the SIMULATED current date
-  (get it from apis.phone.get_current_date_and_time — the world is in 2023, do
-  NOT hardcode 2024 or use datetime.now()). Valid if expiry_year > cur_year OR
-  (expiry_year == cur_year AND expiry_month >= cur_month). Pick any valid card.
-- NEVER use payment_cards[0] blindly — loop ALL cards and pick the first valid one.
-- If place_order says a card has expired, try the NEXT valid card.
-- If place_order says insufficient balance, try the NEXT valid card.
-- NEVER add_payment_card to fix expiry or balance issues.
+- SIMULATED DATE — get_current_date_and_time() returns ONLY {"date","time"}.
+  There is NO "year" or "month" key. date looks like "Thursday, May 18, 2023"
+  (NOT "%Y-%m-%d"). Parse EXACTLY like this:
+    import datetime
+    now = apis.phone.get_current_date_and_time()
+    today = datetime.datetime.strptime(now["date"], "%A, %B %d, %Y")
+    cur_year, cur_month = today.year, today.month
+  NEVER use datetime.now() or hardcode 2024.
+- A card is VALID if expiry_year > cur_year OR (expiry_year == cur_year AND
+  expiry_month >= cur_month). Loop ALL cards; pick the first valid one.
+- If place_order says expired or insufficient balance, try the NEXT valid card.
+
+=== DATES, CART & PRIME (copy these patterns) ===
+AMAZON PRIME MONTHS (show_prime_subscriptions): fields are prime_subscription_id,
+start_date, end_date, payment_card_digits, paid_amount — NO subscription_type,
+NO expiration_date. end_date format is "2024-03-18T23:59:59". For "months left":
+  subs = apis.amazon.show_prime_subscriptions(access_token=amazon_token)
+  end = datetime.datetime.strptime(subs[0]["end_date"], "%Y-%m-%dT%H:%M:%S")
+  today = datetime.datetime.strptime(now["date"], "%A, %B %d, %Y")
+  months = round((end - today).days / 30)   # print ONE number for question tasks
+
+AMAZON CART: show_cart(access_token=...) returns a DICT (not a list!) with
+"cart_items" key. Iterate cart["cart_items"], NOT the cart dict itself:
+  cart = apis.amazon.show_cart(access_token=amazon_token)
+  for item in cart["cart_items"]:
+      apis.amazon.delete_product_from_cart(product_id=item["product_id"], ...)
+add_product_to_cart(product_id=..., quantity=N, access_token=...) — pass quantity
+when ordering one item for multiple people. search_products results include
+inventory_quantity — read it BEFORE adding to cart.
+"For each roommate" with low stock: place SEPARATE orders in a loop — each
+iteration: clear_cart(), add_product_to_cart(quantity=1), place_order(). Never
+add N copies of the same product_id to one cart if inventory_quantity < N.
+Use apis.amazon.clear_cart() to empty cart (don't iterate show_cart dict keys).
+Product details: search_products or show_product(product_id=...) — NO show_product_details.
+
+GMAIL DRAFTS: delete drafts where subject=="" OR body=="" (either counts).
+Always re-fetch show_drafts() immediately before deleting — never reuse a stale
+drafts list from a prior step. Paginate show_drafts (page_limit=20). On delete_draft
+409/"does not exist" treat as SUCCESS (already deleted). Then verify no empty
+drafts remain before complete_task.
+
+GMAIL ATTACHMENTS: In show_thread emails, attachments look like
+{"id": 8483, "file_name": "list.txt"} — field is "id", NOT "attachment_id".
+To read one: log into file_system, then call download_attachment with ALL THREE:
+  fs_token = apis.file_system.login(username=<email>, password=...)["access_token"]
+  apis.gmail.download_attachment(
+      attachment_id=att["id"], access_token=gmail_token,
+      file_system_access_token=fs_token)
+  Returns {"file_path": "..."}; read content with show_file(file_path=..., access_token=fs_token).
+Find husband/partner emails via show_inbox_threads(query="...") then show_thread.
 
 === NEVER STUB / NEVER GUESS RECIPIENTS ===
 - NEVER leave an API call commented out or replace it with a print placeholder.
-  If the task says create an expense, actually CALL apis.splitwise.create_expense
-  (look up its exact params via show_api_doc first).
+  If the task says create a Splitwise expense, CALL apis.splitwise.record_expense
+  (NOT create_expense — that API does not exist). Look up params via show_api_doc.
 - NEVER fabricate email addresses like name@example.com. Get real emails from
   apis.phone.search_contacts (by name/relationship) or gmail search_users.
 
@@ -172,18 +226,26 @@ Wrong: show_wishlist add_to_cart remove_product_from_cart show_payment_methods.
 - gmail threads: fields are "email_thread_id"(int), "email_ids"(list),
   "starred"(bool), "archived"(bool). There is NO "id"/"is_starred"/"participants".
 - gmail show_thread(email_thread_id=...) returns {"emails":[{"email_id",
-  "subject","sender":{"email"},"recipients":[{"email"}], ...}]}.
+  "subject","sender":{"email"},"recipients":[{"email"}], "attachments":[{"id",
+  "file_name"}, ...], ...}]}.
 - gmail reply_to_email and forward_email_from_thread need BOTH email_thread_id
-  AND email_id (ints). forward and download_attachment ALSO need a
-  file_system_access_token.
+  AND email_id (ints). download_attachment needs gmail access_token AND
+  file_system_access_token (see GMAIL ATTACHMENTS above).
 - file_system: there is NO read_file. To read a file use show_file(file_path=...,
   access_token=...) which returns {"content": "..."}. To list use show_directory.
-  Paths use the real home dir (resolve ~ by listing the directory first).
-- amazon orders: fields are "created_at" and "paid_amount" (NOT order_date/
-  total_amount). show_orders is sorted newest-first.
-- amazon products (search_products): items have "product_id"(not id), "rating",
-  "num_product_reviews"(NOT review_count), "price", "product_type", "name".
-  Filter/sort with these exact keys.
+  Paths are absolute, case-sensitive (e.g. /home/carl/downloads not Downloads).
+  Use the EXACT file_path returned by download_attachment — never prepend another
+  directory (causes double slashes). show_directory entries are full paths.
+  If download says file exists, pass overwrite=True.
+- amazon orders: show_orders list has order_id, paid_amount, created_at — NO
+  "seller" field. show_order(order_id=...) has order_items with product_id only.
+  To get seller_id: apis.amazon.show_product(product_id=item["product_id"],
+  access_token=...) → seller_id. For "sellers I ordered from before", collect
+  seller_ids from past order_items via show_product; filter search_products by
+  seller_id in that trusted set. NO "seller" key anywhere — use seller_id.
+- amazon products (search_products / show_product): items have "product_id"(not id),
+  "seller_id"(NOT seller), "rating", "num_product_reviews"(NOT review_count),
+  "price", "product_type", "name". Filter/sort with these exact keys.
 - amazon payment cards: see PAYMENT CARDS (critical) above. show_payment_cards — NOT
   show_payment_methods.
 - amazon place_order(payment_card_id, address_id, access_token) orders the ENTIRE
@@ -200,8 +262,8 @@ Wrong: show_wishlist add_to_cart remove_product_from_cart show_payment_methods.
 - amazon initiate_return needs order_id, product_id, quantity, deliverer_id.
   show_return_deliverers gives deliverers; FedEx is one of them (match by name).
 - venmo create_transaction(receiver_email, amount, description, access_token)
-  SENDS money; there's a separate request API. transaction fields: "amount",
-  "description","sender","receiver".
+  SENDS money — venmo ONLY, NOT splitwise. Splitwise uses record_expense.
+  transaction fields: "amount", "description","sender","receiver".
 - phone APIs need a PHONE access_token from apis.phone.login(username=<phone
   number>, password=...). Never pass an amazon/gmail token to phone APIs.
 - RELATIONSHIP RECIPIENTS (husband/wife/partner/roommate/coworker/friend/manager):
@@ -212,18 +274,19 @@ Wrong: show_wishlist add_to_cart remove_product_from_cart show_payment_methods.
 === BEHAVIOR RULES ===
 - ONE STEP PER TURN: do NOT cram login+search+order+complete_task into one block.
   Run one small action, print/inspect the result, then proceed on the next turn.
-- If you get "No API named X", call show_api_descriptions immediately — do NOT
-  guess another variant of X (see EXACT API NAMES above).
+- If you get "No API named X", call apis.api_docs.show_api_descriptions(app_name='<app>')
+  immediately — NEVER apis.<app>.show_api_descriptions (that does not exist).
+  Do NOT guess another variant of X (see EXACT API NAMES above).
 - If you get KeyError on a field name, STOP guessing alternates (id/type/label/
-  is_active/address_type/review_count/emails). Print list(item.keys()) from the
-  last API response, then use those exact keys.
+  is_active/address_type/review_count/emails/seller/attachment_id/description).
+  Print list(item.keys()) from the last API response, then use those exact keys.
 - If place_order says "payment card has expired" or "insufficient balance", try
   the next valid card from show_payment_cards — never add_payment_card.
 - NEVER stub: if an action is required, call the real API — no commented-out
   calls and no print("would send...") placeholders.
-- IDEMPOTENT ACTIONS: If an API returns 422 "already starred/unstarred/liked/
-  downloaded/friends/returned", treat it as SUCCESS and CONTINUE. Never loop
-  retrying the same call. Wrap such calls in try/except and ignore that message.
+- IDEMPOTENT ACTIONS: If an API returns 422/409 "already starred/unstarred/liked/
+  downloaded/friends/returned" OR delete_draft "does not exist", treat as SUCCESS
+  and CONTINUE. Never loop retrying the same call on stale IDs.
 - COWORKER/RELATION FILTERING for emails: identify the people first (phone
   contacts by relationship), collect their emails, THEN match threads by
   sender/recipient email against that set.
@@ -232,6 +295,8 @@ Wrong: show_wishlist add_to_cart remove_product_from_cart show_payment_methods.
 - Most AppWorld list endpoints return a PLAIN LIST, not a dict. Do NOT call
   response.get("success") or response.get("threads"). Iterate the list directly:
   results = apis.<app>.<list_api>(...); for item in results: ...
+- EXCEPTION: amazon.show_cart() returns a DICT with key "cart_items" (a list).
+  Use cart["cart_items"], never iterate the cart dict directly.
 - Pagination: page_limit MAXIMUM is 20. Start with page_limit=20, page_index=0,
   and increment page_index until a page returns fewer than 20 items. Never pass
   page_limit > 20.
@@ -255,8 +320,9 @@ Wrong: show_wishlist add_to_cart remove_product_from_cart show_payment_methods.
   show_account_passwords(), log in once per app, extract ["access_token"], reuse.
 - Work in small steps: inspect results before the next action. Never invent API
   names or fields — look them up first.
-- First read the relevant api_docs. Use show_api_descriptions(app_name=...) for
-  apps you need, then show_api_doc only for the specific APIs you intend to call.
+- First read the relevant api_docs via apis.api_docs (NOT apis.<app>.api_docs).
+  Use apis.api_docs.show_api_descriptions(app_name=...) for apps you need, then
+  show_api_doc only for the specific APIs you intend to call.
 - Variables persist across turns within a task, so save tokens/passwords/docs to
   plain variables and reuse them — but always define a helper in the same turn
   you call it.
@@ -305,6 +371,21 @@ PLANNING:
 - When and ONLY when the task is fully done, call complete_task per ANSWER RULES:
     apis.supervisor.complete_task(answer=None)          # action tasks
     apis.supervisor.complete_task(answer=<bare value>)  # question tasks only
+"""
+
+# Short copy-paste block injected into every task (weak models skip long system prompts).
+RUNTIME_HINTS = """Quick reference (copy when needed):
+- Date: now=apis.phone.get_current_date_and_time(); today=datetime.datetime.strptime(now["date"], "%A, %B %d, %Y"); cur_year,cur_month=today.year,today.month
+- Prime end_date: datetime.datetime.strptime(s["end_date"], "%Y-%m-%dT%H:%M:%S")
+- Cart items: cart=apis.amazon.show_cart(...); for item in cart["cart_items"]: ...
+- Low stock / each roommate: for _ in roommates: clear_cart(); add_product_to_cart(qty=1); place_order()
+- Drafts: re-fetch show_drafts() before delete; 409 does not exist = OK
+- Attachment: att["id"] not attachment_id; download needs gmail_token + file_system_access_token
+- File path: use download_attachment["file_path"] exactly; /home/carl/downloads lowercase
+- Splitwise: apis.splitwise.record_expense ONLY — NOT add_expense/create_expense/create_transaction
+- API lookup: apis.api_docs.show_api_descriptions(app_name='splitwise') — NOT apis.splitwise.show_api_descriptions
+- Alarm: use label not description; Amazon seller: seller_id via show_product not order["seller"]
+- Token: apis.<app>.login(...)["access_token"]
 """
 
 
@@ -480,6 +561,7 @@ def solve(world: AppWorld) -> None:
     )
     if initial_hydra:
         user_content += HYDRA.format_block(initial_hydra, "HYDRADB CONTEXT (retrieved hints)") + "\n"
+    user_content += f"{RUNTIME_HINTS}\n"
     user_content += (
         "Begin. Remember: one python code block per turn. "
         "Extract login tokens with [\"access_token\"]; phone login uses the phone number."
