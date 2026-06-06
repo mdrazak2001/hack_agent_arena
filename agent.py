@@ -54,7 +54,7 @@ import litellm
 MODEL = os.environ.get("MODEL", "groq/llama-3.3-70b-versatile")
 DATASET = os.environ.get("APPWORLD_DATASET", "dev")          # dev | test_normal | test_challenge
 EXPERIMENT = os.environ.get("APPWORLD_EXPERIMENT", "team_demo")
-MAX_INTERACTIONS = int(os.environ.get("MAX_INTERACTIONS", "40"))
+MAX_INTERACTIONS = int(os.environ.get("MAX_INTERACTIONS", "50"))
 MAX_TASKS = int(os.environ.get("MAX_TASKS", "0"))            # 0 = all tasks in split
 LLM_NUM_RETRIES = int(os.environ.get("LLM_NUM_RETRIES", "8"))
 TRACE_DIR = Path(os.environ.get("TRACE_DIR", "traces")) / EXPERIMENT
@@ -71,6 +71,38 @@ RULES:
   ```python
   # your code
   ```
+
+=== ANSWER RULES (MOST IMPORTANT — read carefully) ===
+- complete_task(answer=...) has TWO modes:
+  1. ACTION tasks (do/make/send/order/star/schedule/reply/forward/buy/initiate/
+     reset/pay): the task asks you to CHANGE state, not to report a value.
+     => ALWAYS call complete_task(answer=None). NEVER pass a confirmation
+        sentence like "Order placed" or "Emails sent". The grader expects null;
+        any string FAILS the task.
+  2. QUESTION tasks (how many / how much / what is / list ...): return ONLY the
+     bare value — a number like 15 or 38634.99, or the exact short string/list
+     requested. NO sentences, NO units, NO "The answer is...".
+     Example: if asked "how many hours", answer=15  (NOT "15 hours", NOT a sentence).
+- Before calling complete_task, ask: "Is this a question, or an action?"
+  If action -> answer=None. If question -> answer=<bare value only>.
+
+=== RESPONSE SHAPE RULES ===
+- Most AppWorld list endpoints return a PLAIN LIST, not a dict. Do NOT call
+  response.get("success") or response.get("threads"). Iterate the list directly:
+  results = apis.<app>.<list_api>(...); for item in results: ...
+- Pagination: page_limit MAXIMUM is 20. Start with page_limit=20, page_index=0,
+  and increment page_index until a page returns fewer than 20 items. Never pass
+  page_limit > 20.
+
+=== VERIFY BEFORE COMPLETING ===
+- Re-read the task and act on EXACTLY what it specifies:
+  * "all weightlifting benches in my cart" = ONLY those items, not the whole cart.
+  * "two same-colored T-shirts" = quantity 2 of ONE product, check inventory.
+  * recipients/contacts: look up the REAL email/phone from phone contacts or
+    gmail search_users — never invent placeholders like "husband@example.com".
+- After doing the action, do a quick read-back to confirm the intended state,
+  THEN call complete_task(answer=None) for action tasks.
+
 - A preloaded object `apis` is the ONLY way to interact with the apps. Whatever
   you print() is returned to you as the next observation.
 - You do NOT know the APIs in advance. Discover them at runtime:
@@ -97,14 +129,20 @@ RULES:
 - Execute exactly one step at a time, and verify the result before proceeding.
 
 DATA-COMPLETENESS RULES (critical for correctness):
-- PAGINATION: Any API with page_index/page_limit returns ONE page only. To get
-  the COMPLETE list, loop: page_index=0,1,2,... with the max page_limit, and keep
-  going until a page returns fewer than page_limit items (or empty). NEVER assume
-  page 0 has everything.
+- PAGINATION: Any API with page_index/page_limit returns ONE page only. Use
+  page_limit=20 (the maximum), page_index=0,1,2,... and keep going until a page
+  returns fewer than 20 items (or empty). NEVER assume page 0 has everything.
 - RANKINGS ("most played", "top", "highest", "popular", "best"): Do NOT guess
   from order or frequency. Find the actual numeric field (e.g. play_count,
   rating, like_count) by reading the item's full details (e.g. show_song for each
   song). Sort by that exact field, then take the requested count.
+  For "most played / top / popular <genre> songs in my library":
+  (a) Page through show_song_library FULLY (page_index 0,1,2,... until a short
+      page). List endpoints do NOT include genre or play_count.
+  (b) For EACH song_id, call show_song(song_id) to get genre AND play_count.
+  (c) Filter to the requested genre, sort by play_count DESCENDING.
+  (d) Return EXACTLY the requested number of titles, in that order.
+  NEVER rank by frequency-across-libraries, added_at, or list order.
 - DERIVED FIELDS (genre, etc.): If a field isn't in a list response, fetch it
   from the item's detail API (show_song gives a song's genre and play_count) or
   via its album. Don't infer it.
@@ -114,6 +152,9 @@ DATA-COMPLETENESS RULES (critical for correctness):
   fewer items than the task asked for, STOP and investigate (you probably missed
   pagination, a detail lookup, or a filter). Never submit an empty or obviously
   incomplete answer.
+- For challenge tasks, prefer fetching per-item details over inferring from list
+  summaries. If an answer looks empty/too short, you missed pagination or a
+  detail lookup — investigate.
 
 PLANNING:
 - For any "find/rank/filter" task, first write the full plan as comments:
@@ -124,8 +165,9 @@ PLANNING:
 - Before every action, ask: did the task ask me to do this? If no, skip it.
 - Never delete, overwrite, send, or post anything unless the instruction explicitly requires it.
 - If you are unsure whether an action is required, do NOT take it.
-- When and ONLY when the task is fully done, call:
-    apis.supervisor.complete_task(answer=<answer>)   # answer=None if not a question
+- When and ONLY when the task is fully done, call complete_task per ANSWER RULES:
+    apis.supervisor.complete_task(answer=None)          # action tasks
+    apis.supervisor.complete_task(answer=<bare value>)  # question tasks only
 """
 
 
@@ -133,7 +175,7 @@ def call_llm(messages: list[dict]) -> str:
     kwargs = {
         "model": MODEL,
         "messages": [{"role": "system", "content": SYSTEM_PROMPT}, *messages],
-        "max_tokens": 1500,
+        "max_tokens": 2500,
         "temperature": 0.0,
         "num_retries": LLM_NUM_RETRIES,   # ride out free-tier rate limits (429) with backoff
     }
@@ -148,6 +190,33 @@ def call_llm(messages: list[dict]) -> str:
         })
     resp = litellm.completion(**kwargs)
     return resp.choices[0].message.content or ""
+
+
+def resolve_task_ids(dataset_name: str) -> list[str]:
+    """Load task IDs for a dataset split, with a direct file fallback."""
+    try:
+        return load_task_ids(dataset_name)
+    except Exception:
+        pass
+    dataset_file = Path("data") / "datasets" / f"{dataset_name}.txt"
+    if not dataset_file.is_file():
+        try:
+            from appworld.common.path_store import path_store
+            dataset_file = Path(path_store.data) / "datasets" / f"{dataset_name}.txt"
+        except Exception:
+            pass
+    if not dataset_file.is_file():
+        raise FileNotFoundError(
+            f"Dataset '{dataset_name}' not found via load_task_ids or {dataset_file}"
+        )
+    task_ids = [
+        line.strip().split(":")[0]
+        for line in dataset_file.read_text(encoding="utf-8").splitlines()
+        if line.strip()
+    ]
+    if not task_ids:
+        raise ValueError(f"No task IDs in {dataset_file}")
+    return task_ids
 
 
 def extract_code(text: str) -> str:
@@ -300,7 +369,7 @@ def solve(world: AppWorld) -> None:
 
 
 def main() -> None:
-    task_ids = load_task_ids(DATASET)
+    task_ids = resolve_task_ids(DATASET)
     if MAX_TASKS:
         task_ids = task_ids[:MAX_TASKS]
     print(f"Running '{EXPERIMENT}' on {len(task_ids)} '{DATASET}' tasks with {MODEL}")
