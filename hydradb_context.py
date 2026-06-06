@@ -55,6 +55,18 @@ download_attachment(attachment_id=att["id"], access_token=gmail_token, file_syst
 Then show_file on returned file_path. Find emails via show_inbox_threads + show_thread.
 
 PHONE ALARMS: fields alarm_id time label enabled repeat_days — NO description. Disable via update_alarm.
+show_alarms DEFAULT page_limit=5 — paginate page_limit=20 until short page.
+Cancel emails: extract sender first name, disable alarm if label contains that name (One-on-One with X).
+
+MEETING REMINDERS: create_draft ONLY (not send_email). body="". scheduled_send_at=meeting-20min.
+Subject: Meeting '<name>' Starting Soon. Recipients via phone.search_contacts(query=first_name).
+
+WISHLIST ORDER: clear_cart first. move_product_from_wish_list_to_cart(..., quantity=item["quantity"]).
+Best rated in price range: max(rating) with exact product_type — no rating>4 filter.
+Single product order: clear_cart, qty=1, verify one cart item.
+
+SPLITWISE CABLE BILLS: email created_at not sent_at. Cost from attachment Total Amount line.
+Description "cable bill [MM-YY]". group_id from show_groups. debtor_emails=group member emails not phone contacts.
 
 AMAZON SELLERS: orders have NO seller field. show_order -> order_items -> show_product(product_id) -> seller_id.
 Trusted sellers = seller_ids from past orders. search_products results also have seller_id not seller.
@@ -205,7 +217,7 @@ class HydraContext:
 
     def _seed_marker(self) -> Path:
         safe = "".join(c if c.isalnum() or c in "._-" else "_" for c in self.tenant_id)
-        return self.cache_dir / f".hydra_seeded_v5_{safe}"
+        return self.cache_dir / f".hydra_seeded_v6_{safe}"
 
     def _seed_playbook_if_needed(self) -> None:
         assert self.client is not None
