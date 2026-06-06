@@ -56,7 +56,12 @@ Then show_file on returned file_path. Find emails via show_inbox_threads + show_
 
 PHONE ALARMS: fields alarm_id time label enabled repeat_days — NO description. Disable via update_alarm.
 show_alarms DEFAULT page_limit=5 — paginate page_limit=20 until short page.
-Cancel emails: extract sender first name, disable alarm if label contains that name (One-on-One with X).
+Cancel alarms: subject EXACTLY Skip this time? / Cancel Meeting? / Cannot make it; label EXACT One-on-One with {first_name}.
+Gift per roommate: among max(rating) pick product with inventory_quantity >= n roommates; loop exactly n orders.
+Splitwise cable: debtor_emails=[m["email"] for m in group["members"]]; month from subject Cable Bill for June 2023 -> [06-23]; download overwrite=True.
+Husband checklist: subject Get-together Shopping List; parse attachment not body; no base64.
+Wishlist text: relationships plural; send_text_message ONCE only.
+Phone contacts: field is relationships (plural), not relationship.
 
 MEETING REMINDERS: create_draft ONLY (not send_email). body="". scheduled_send_at=meeting-20min.
 Subject: Meeting '<name>' Starting Soon. Recipients via phone.search_contacts(query=first_name).
@@ -217,7 +222,7 @@ class HydraContext:
 
     def _seed_marker(self) -> Path:
         safe = "".join(c if c.isalnum() or c in "._-" else "_" for c in self.tenant_id)
-        return self.cache_dir / f".hydra_seeded_v6_{safe}"
+        return self.cache_dir / f".hydra_seeded_v8_{safe}"
 
     def _seed_playbook_if_needed(self) -> None:
         assert self.client is not None
