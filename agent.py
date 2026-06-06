@@ -21,7 +21,7 @@ How AppWorld works (the rules your agent plays by):
     Pass `answer` only when the task asks a question; otherwise leave it None.
 
 Run:
-  export ANTHROPIC_API_KEY=sk-...             # or put it in .env
+  export GROQ_API_KEY=gsk_...                 # or put it in .env
   export APPWORLD_EXPERIMENT=team_<yourname>   # your unique team id
   export APPWORLD_DATASET=dev                  # dev while building; switch to the
                                                # official split at submission time
@@ -30,8 +30,14 @@ Run:
 
 import os
 import re
+import json
+import traceback
+import signal
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import Optional
 
-try:  # optional: load ANTHROPIC_API_KEY etc. from a local .env
+try:  # optional: load GROQ_API_KEY etc. from a local .env
     from dotenv import load_dotenv
     load_dotenv()
 except Exception:
@@ -48,8 +54,14 @@ import litellm
 MODEL = os.environ.get("MODEL", "groq/llama-3.3-70b-versatile")
 DATASET = os.environ.get("APPWORLD_DATASET", "dev")          # dev | test_normal | test_challenge
 EXPERIMENT = os.environ.get("APPWORLD_EXPERIMENT", "team_demo")
-MAX_INTERACTIONS = int(os.environ.get("MAX_INTERACTIONS", "30"))
+MAX_INTERACTIONS = int(os.environ.get("MAX_INTERACTIONS", "40"))
 MAX_TASKS = int(os.environ.get("MAX_TASKS", "0"))            # 0 = all tasks in split
+LLM_NUM_RETRIES = int(os.environ.get("LLM_NUM_RETRIES", "8"))
+TRACE_DIR = Path(os.environ.get("TRACE_DIR", "traces")) / EXPERIMENT
+
+APPWORLD_KWARGS = {}
+if not hasattr(signal, "SIGALRM"):
+    APPWORLD_KWARGS["timeout_seconds"] = None
 
 SYSTEM_PROMPT = """You are an autonomous coding agent operating inside AppWorld.
 You complete the supervisor's task by writing Python code that the environment executes.
@@ -70,18 +82,71 @@ RULES:
     # then call that app's login API to get an access_token, and pass it onward.
 - Work in small steps: inspect results before the next action. Never invent API
   names or fields — look them up first.
+- First read the relevant api_docs. Use show_api_descriptions(app_name=...) for
+  apps you need, then show_api_doc only for the specific APIs you intend to call.
+- Variables persist across turns within a task, so save tokens/passwords/docs to
+  plain variables and reuse them — but always define a helper in the same turn
+  you call it.
+- Do not call show_api_doc for every API in an app. Pull the exact API doc only
+  after choosing the API from show_api_descriptions.
+- Before calling any app's login API, read its doc with show_api_doc(..., api_name='login').
+  Login almost always takes username=<supervisor email> and password=<matching password>.
+  show_account_passwords() returns account_name (e.g. "spotify") — that is NOT the username.
+  Use the supervisor's email from the task context as username; never pass account_name=.
+- Fetch supervisor passwords once, then log into only the apps needed for the task.
+- Execute exactly one step at a time, and verify the result before proceeding.
+
+DATA-COMPLETENESS RULES (critical for correctness):
+- PAGINATION: Any API with page_index/page_limit returns ONE page only. To get
+  the COMPLETE list, loop: page_index=0,1,2,... with the max page_limit, and keep
+  going until a page returns fewer than page_limit items (or empty). NEVER assume
+  page 0 has everything.
+- RANKINGS ("most played", "top", "highest", "popular", "best"): Do NOT guess
+  from order or frequency. Find the actual numeric field (e.g. play_count,
+  rating, like_count) by reading the item's full details (e.g. show_song for each
+  song). Sort by that exact field, then take the requested count.
+- DERIVED FIELDS (genre, etc.): If a field isn't in a list response, fetch it
+  from the item's detail API (show_song gives a song's genre and play_count) or
+  via its album. Don't infer it.
+- COUNTS: Re-read the task for the EXACT number requested (top 4 vs top 6) and
+  the EXACT ordering. Return precisely that many, in that order.
+- SANITY CHECK BEFORE complete_task: If your computed answer is empty, or has
+  fewer items than the task asked for, STOP and investigate (you probably missed
+  pagination, a detail lookup, or a filter). Never submit an empty or obviously
+  incomplete answer.
+
+PLANNING:
+- For any "find/rank/filter" task, first write the full plan as comments:
+  (1) what complete data do I need, (2) which detail lookups give the ranking
+  field, (3) how do I sort and cut to the requested count. Then execute it.
+
+- Never touch unrelated user data or app records.
+- Before every action, ask: did the task ask me to do this? If no, skip it.
+- Never delete, overwrite, send, or post anything unless the instruction explicitly requires it.
+- If you are unsure whether an action is required, do NOT take it.
 - When and ONLY when the task is fully done, call:
     apis.supervisor.complete_task(answer=<answer>)   # answer=None if not a question
 """
 
 
 def call_llm(messages: list[dict]) -> str:
-    resp = litellm.completion(
-        model=MODEL,
-        messages=[{"role": "system", "content": SYSTEM_PROMPT}, *messages],
-        max_tokens=1500,
-        num_retries=8,   # ride out free-tier rate limits (429) with backoff
-    )
+    kwargs = {
+        "model": MODEL,
+        "messages": [{"role": "system", "content": SYSTEM_PROMPT}, *messages],
+        "max_tokens": 1500,
+        "temperature": 0.0,
+        "num_retries": LLM_NUM_RETRIES,   # ride out free-tier rate limits (429) with backoff
+    }
+    if MODEL.startswith("groq/"):
+        groq_api_key = os.environ.get("GROQ_API_KEY")
+        if not groq_api_key:
+            raise RuntimeError("GROQ_API_KEY is required for MODEL=groq/...")
+        kwargs.update({
+            "model": MODEL.split("/", 1)[1],
+            "custom_llm_provider": "groq",
+            "api_key": groq_api_key,
+        })
+    resp = litellm.completion(**kwargs)
     return resp.choices[0].message.content or ""
 
 
@@ -90,26 +155,148 @@ def extract_code(text: str) -> str:
     return m.group(1).strip() if m else text.strip()
 
 
+def format_supervisor(supervisor: dict) -> str:
+    email = supervisor.get("email", "")
+    phone = supervisor.get("phone_number", "")
+    name = f"{supervisor.get('first_name', '')} {supervisor.get('last_name', '')}".strip()
+    return (
+        f"Name: {name}\n"
+        f"Email (use as username for app logins): {email}\n"
+        f"Phone: {phone}"
+    )
+
+
+def restore_safety_guard(world: Optional[AppWorld] = None) -> None:
+    """AppWorld patches builtins.open globally; ensure it is restored between tasks."""
+    try:
+        if world is not None:
+            world.safety_guard.disable()
+    except Exception:
+        pass
+    try:
+        from appworld.common.safety_guard import SafetyGuard
+        SafetyGuard().disable()
+    except Exception:
+        pass
+
+
+def preview_output(output: str, limit: int = 120) -> str:
+    if "Execution failed" in output or "Execution raised an exception" in output:
+        lines = [ln for ln in output.splitlines() if ln.strip()]
+        if lines:
+            return lines[-1][:400]
+    return output[:limit]
+
+
+def safe_task_id(world: AppWorld) -> str:
+    task_id = getattr(world, "task_id", None) or getattr(world.task, "id", None)
+    if not task_id:
+        task_id = re.sub(r"\W+", "_", world.task.instruction[:60]).strip("_") or "task"
+    return str(task_id)
+
+
+def new_trace(world: AppWorld) -> dict:
+    return {
+        "task_id": safe_task_id(world),
+        "dataset": DATASET,
+        "experiment": EXPERIMENT,
+        "model": MODEL,
+        "max_interactions": MAX_INTERACTIONS,
+        "started_at": datetime.now(timezone.utc).isoformat(),
+        "supervisor": world.task.supervisor,
+        "instruction": world.task.instruction,
+        "steps": [],
+        "final_status": "running",
+    }
+
+
+def write_trace(trace: dict) -> None:
+    TRACE_DIR.mkdir(parents=True, exist_ok=True)
+    safe_name = re.sub(r"[^A-Za-z0-9_.-]+", "_", trace["task_id"]).strip("_") or "task"
+    path = TRACE_DIR / f"{safe_name}.json"
+    trace["updated_at"] = datetime.now(timezone.utc).isoformat()
+    path.write_text(json.dumps(trace, indent=2), encoding="utf-8")
+
+
+def execute_action(world: AppWorld, code: str) -> tuple[str, Optional[str]]:
+    try:
+        return str(world.execute(code)), None
+    except Exception:
+        error = traceback.format_exc()
+        try:
+            world.safety_guard.disable()
+        except Exception:
+            pass
+        observation = f"Execution raised an exception. Full traceback:\n{error}"
+        return observation, error
+
+
+def check_task_completed(world: AppWorld) -> tuple[bool, Optional[str]]:
+    try:
+        return world.task_completed(), None
+    except Exception:
+        return False, traceback.format_exc()
+
+
 def solve(world: AppWorld) -> None:
+    trace = new_trace(world)
+    write_trace(trace)
     messages = [{
         "role": "user",
         "content": (
-            f"Supervisor: {world.task.supervisor}\n\n"
+            f"{format_supervisor(world.task.supervisor)}\n\n"
             f"Task: {world.task.instruction}\n\n"
             "Begin. Remember: one python code block per turn."
         ),
     }]
     for step in range(MAX_INTERACTIONS):
-        reply = call_llm(messages)
+        try:
+            reply = call_llm(messages)
+        except Exception:
+            error = traceback.format_exc()
+            print(f"  ! LLM call failed on step {step+1}; moving to next task")
+            trace["steps"].append({
+                "step": step + 1,
+                "reply": None,
+                "code": None,
+                "observation": None,
+                "llm_error": error,
+                "completed": False,
+            })
+            trace["final_status"] = "llm_error"
+            write_trace(trace)
+            restore_safety_guard(world)
+            return
         code = extract_code(reply)
-        output = world.execute(code)
-        print(f"  step {step+1}: ran {len(code)} chars -> {str(output)[:120]!r}")
+        output, execution_error = execute_action(world, code)
+        print(f"  step {step+1}: ran {len(code)} chars -> {preview_output(str(output))!r}")
+        if execution_error:
+            print(f"  step {step+1}: execution raised; fed traceback back")
+        completed, completion_error = check_task_completed(world)
+        if completion_error:
+            output = f"{output}\n\nTask completion check raised an exception:\n{completion_error}"
+        trace["steps"].append({
+            "step": step + 1,
+            "reply": reply,
+            "code": code,
+            "observation": str(output),
+            "execution_error": execution_error,
+            "completion_error": completion_error,
+            "completed": completed,
+        })
+        write_trace(trace)
         messages.append({"role": "assistant", "content": reply})
         messages.append({"role": "user", "content": f"Execution output:\n{output}"})
-        if world.task_completed():
+        if completed:
+            trace["final_status"] = "completed"
+            write_trace(trace)
             print("  ✓ task_completed")
+            restore_safety_guard(world)
             return
     print("  ✗ hit MAX_INTERACTIONS without completion")
+    trace["final_status"] = "max_interactions"
+    write_trace(trace)
+    restore_safety_guard(world)
 
 
 def main() -> None:
@@ -119,11 +306,17 @@ def main() -> None:
     print(f"Running '{EXPERIMENT}' on {len(task_ids)} '{DATASET}' tasks with {MODEL}")
     for i, task_id in enumerate(task_ids, 1):
         print(f"[{i}/{len(task_ids)}] {task_id}")
-        with AppWorld(task_id=task_id, experiment_name=EXPERIMENT) as world:
-            try:
+        restore_safety_guard()
+        world: Optional[AppWorld] = None
+        try:
+            world = AppWorld(task_id=task_id, experiment_name=EXPERIMENT, **APPWORLD_KWARGS)
+            with world:
                 solve(world)
-            except Exception as e:  # never let one task kill the whole run
-                print(f"  ! error: {e}")
+        except Exception as e:  # never let one task kill the whole run
+            print(f"  ! error: {e}")
+            print(traceback.format_exc())
+        finally:
+            restore_safety_guard(world)
     print(f"\nDone. Outputs in ./experiments/outputs/{EXPERIMENT}/")
     print("Hand that folder to the organizers (or zip and submit per instructions).")
 

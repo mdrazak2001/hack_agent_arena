@@ -28,8 +28,9 @@ python -c "from appworld import load_task_ids; print('dev:', len(load_task_ids('
 cat <<'NEXT'
 
 ✅ Setup done. Next:
-  source .venv/bin/activate
-  # put your key in .env  ->  ANTHROPIC_API_KEY=sk-...
+  source .venv/bin/activate          # macOS / Linux
+  source .venv/Scripts/activate      # Windows (Git Bash)
+  # put your key in .env  ->  GROQ_API_KEY=gsk_...
   export APPWORLD_EXPERIMENT=team_<yourname>
   export APPWORLD_DATASET=dev MAX_TASKS=2     # quick smoke before the full run
   python agent.py
