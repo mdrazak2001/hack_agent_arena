@@ -61,7 +61,7 @@
             "failures": [
                 {
                     "requirement": "assert model changes match phone.GlobalTextMessage, phone.UserTextMessage",
-                    "trace": "```python\nwith test(\n    \"\"\"\n    assert model changes match phone.GlobalTextMessage, phone.UserTextMessage\n    \"\"\"\n):\n    changed_model_names = models.changed_model_names()\n    test.case(changed_model_names, \"==\", {\"phone.GlobalTextMessage\", \"phone.UserTextMessage\"})\n```\n----------\nAssertionError:  set() == {'phone.UserTextMessage', 'phone.GlobalTextMessage'}\n\nIn right but not left:\n['phone.UserTextMessage', 'phone.GlobalTextMessage']",
+                    "trace": "```python\nwith test(\n    \"\"\"\n    assert model changes match phone.GlobalTextMessage, phone.UserTextMessage\n    \"\"\"\n):\n    changed_model_names = models.changed_model_names()\n    test.case(changed_model_names, \"==\", {\"phone.GlobalTextMessage\", \"phone.UserTextMessage\"})\n```\n----------\nAssertionError:  set() == {'phone.GlobalTextMessage', 'phone.UserTextMessage'}\n\nIn right but not left:\n['phone.GlobalTextMessage', 'phone.UserTextMessage']",
                     "label": "no_op_fail"
                 },
                 {
