@@ -1,8 +1,8 @@
-──────────────────────────────── Overall Stats ─────────────────────────────────
+─────────────────────────────────────── Overall Stats ───────────────────────────────────────
 Num Passed Tests : 10
 Num Failed Tests : 0
 Num Total  Tests : 10
-──────────────────────────────────── Passes ────────────────────────────────────
+────────────────────────────────────────── Passes ───────────────────────────────────────────
 >> Passed Requirement
 assert answers match.
 >> Passed Requirement
@@ -11,8 +11,7 @@ assert model changes match gmail.Draft.
 obtain added, updated, deleted gmail.Draft using models.changed_records, and
 assert 0 is updated, 0 is deleted.
 >> Passed Requirement
-assert the number of added drafts is equal to the
-len(private_data.expected_draft_data)
+assert the number of added drafts is equal to the len(private_data.expected_draft_data)
 >> Passed Requirement
 assert the added drafts subjects match the subjects from
 private_data.expected_draft_data (ignore order, normalize_text=True)
@@ -30,5 +29,5 @@ matches that from the private_data.expected_draft_data.
 >> Passed Requirement
 assert the subject to scheduled_send_at dict from the added drafts
 matches that from the private_data.expected_draft_data.
-──────────────────────────────────── Fails ─────────────────────────────────────
+─────────────────────────────────────────── Fails ───────────────────────────────────────────
 None

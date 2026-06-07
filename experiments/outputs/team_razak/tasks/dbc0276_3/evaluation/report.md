@@ -1,14 +1,13 @@
-──────────────────────────────── Overall Stats ─────────────────────────────────
+─────────────────────────────────────── Overall Stats ───────────────────────────────────────
 Num Passed Tests : 2
 Num Failed Tests : 6
 Num Total  Tests : 8
-──────────────────────────────────── Passes ────────────────────────────────────
+────────────────────────────────────────── Passes ───────────────────────────────────────────
 >> Passed Requirement
 assert answers match.
 >> Passed Requirement
-assert 0 records have been deleted from phone.UserTextMessage using
-models.changed_records.
-──────────────────────────────────── Fails ─────────────────────────────────────
+assert 0 records have been deleted from phone.UserTextMessage using models.changed_records.
+─────────────────────────────────────────── Fails ───────────────────────────────────────────
 >> Failed Requirement
 assert model changes match phone.GlobalTextMessage, phone.UserTextMessage
 ```python
@@ -22,18 +21,16 @@ with test(
 "phone.UserTextMessage"})
 ```
 ----------
-AssertionError:  set() == {'phone.UserTextMessage', 'phone.GlobalTextMessage'}
+AssertionError:  set() == {'phone.GlobalTextMessage', 'phone.UserTextMessage'}
 
 In right but not left:
-['phone.UserTextMessage', 'phone.GlobalTextMessage']
+['phone.GlobalTextMessage', 'phone.UserTextMessage']
 >> Failed Requirement
-assert 1 record has been added to phone.GlobalTextMessage using
-models.changed_records.
+assert 1 record has been added to phone.GlobalTextMessage using models.changed_records.
 ```python
 with test(
     """
-    assert 1 record has been added to phone.GlobalTextMessage using
-models.changed_records.
+    assert 1 record has been added to phone.GlobalTextMessage using models.changed_records.
     """
 ):
     added_messages, _, _ = models.changed_records("phone.GlobalTextMessage")
@@ -54,13 +51,13 @@ with test(
 ```
 ----------
 >> Failed Requirement
-assert all keys of private_data.product_name_to_total_price are mentioned in the
-message (ignoring case).
+assert all keys of private_data.product_name_to_total_price are mentioned in the message
+(ignoring case).
 ```python
 with test(
     """
-    assert all keys of private_data.product_name_to_total_price are mentioned in
-the message (ignoring case).
+    assert all keys of private_data.product_name_to_total_price are mentioned in the message
+(ignoring case).
     """
 ):
     test.case(
@@ -69,13 +66,12 @@ the message (ignoring case).
 ```
 ----------
 >> Failed Requirement
-assert all values of private_data.product_name_to_total_price are mentioned in
-the message.
+assert all values of private_data.product_name_to_total_price are mentioned in the message.
 ```python
 with test(
     """
-    assert all values of private_data.product_name_to_total_price are mentioned
-in the message.
+    assert all values of private_data.product_name_to_total_price are mentioned in the
+message.
     """
 ):
     test.case(
@@ -85,14 +81,12 @@ in the message.
 ----------
 >> Failed Requirement
 parse the message content into product_name_to_total_price map and assert
-it matches data.private.product_name_to_total_price (ignore_case,
-tolerance=1.01)
+it matches data.private.product_name_to_total_price (ignore_case, tolerance=1.01)
 ```python
 with test(
     """
     parse the message content into product_name_to_total_price map and assert
-    it matches data.private.product_name_to_total_price (ignore_case,
-tolerance=1.01)
+    it matches data.private.product_name_to_total_price (ignore_case, tolerance=1.01)
     """
 ):
     message_content = message.message
