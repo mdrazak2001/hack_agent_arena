@@ -8,6 +8,10 @@ __pycache__/
 
 # AppWorld runtime artifacts (downloaded / generated locally)
 data/
-experiments/
+experiments/*
+!experiments/outputs/
+experiments/outputs/*
+!experiments/outputs/team_razak/
+!experiments/outputs/team_razak/**
 logs/
 traces/

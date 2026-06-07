@@ -1,0 +1,17 @@
+{
+    "file_system": {
+        "File": 6,
+        "Directory": 4
+    },
+    "gmail": {
+        "Attachment": 6
+    },
+    "splitwise": {
+        "Expense": 24,
+        "ExpenseShare": 18,
+        "Notification": 12
+    },
+    "supervisor": {
+        "Task": 1
+    }
+}
